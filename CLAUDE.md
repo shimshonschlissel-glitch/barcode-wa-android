@@ -16,7 +16,7 @@
 | האתר (עובד בכל דפדפן, אפשר להתקין) | https://barcode-wa.netlify.app |
 | האפליקציה לאנדרואיד (הורדה) | https://barcode-wa.netlify.app/barcode-wa.apk |
 | ניהול האתר ב-Netlify (חשבון גוגל shimshonschlissel@gmail.com) | https://app.netlify.com/projects/barcode-wa |
-| הקוד ב-GitHub (ציבורי) | https://github.com/shimshonschlissel-glitch/barcode-wa-android |
+| הקוד ב-GitHub (ציבורי, Claude מורשה לדחוף) | https://github.com/shimshonschlissel-glitch/barcode-wa-android |
 | מפתח החתימה של האפליקציה (פרטי!) | `מסמכים\barcode-wa-key` במחשב, ותיקייה פרטית `barcode-wa-key` ב-Google Drive |
 | תיקיית הפרויקט במחשב | `מסמכים\barcode-wa` |
 
@@ -72,6 +72,9 @@
 
 ### את האתר
 
+**מגבלת Netlify (תוכנית חינמית):** 300 קרדיטים בחודש, וכל העלאה לאתר (production deploy) עולה 15. כשהקרדיטים נגמרים, האתר מושבת עד החודש הבא.
+לכן מרכזים כמה שינויים להעלאה אחת. מצב נוכחי: Netlify → Usage & billing. (17.11: נשארו 225 עד 15.12.)
+
 1. עורכים את `source\web\`.
 2. מעלים את `VERSION` ב-`sw.js` ואת מספר הגרסה בדף.
 3. מעתיקים את קבצי `web\` לתוך `site\` (בלי למחוק את `barcode-wa.apk`).
@@ -94,8 +97,7 @@
 - המצלמה בתוך האפליקציה (אישור ההרשאה, מהירות). כנראה אין `BarcodeDetector` ב-WebView, אז רץ מנוע הגיבוי.
 - וואטסאפ רגיל (לא Business) אצל מישהו אחר.
 - מה וואטסאפ מחזיר כשחוזרים בלי לשלוח (האפליקציה מניחה ש-`0` = לא נשלח).
-- GitHub: עדיין לא מאושר ל-Claude לדחוף קוד. צריך להתקין את Claude GitHub App על המאגר:
-  https://github.com/apps/claude/installations/select_target. עד אז הקוד שמור ב-`source\` וב-`source.bundle`.
+- חלופה לאחסון בלי מגבלת העלאות: GitHub Pages מתוך המאגר (הכתובת תשתנה). לשקול לפני שמפיצים לחברים.
 - `.github/workflows/build.yml` בונה רק לבדיקה שהקוד מתקמפל. האפליקציה להפצה נבנית ונחתמת מקומית.
 
 ## רעיונות להמשך (לא התחלנו)
