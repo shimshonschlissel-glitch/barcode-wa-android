@@ -291,7 +291,7 @@ html:not(.native) .app-only { display: none !important; }
   <footer class="foot">
     <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
     <details class="diag">
-      <summary>פרטי אבחון (גרסה 8)</summary>
+      <summary>פרטי אבחון (גרסה 9)</summary>
       <p id="diag" dir="auto"></p>
     </details>
   </footer>
@@ -379,7 +379,15 @@ html:not(.native) .app-only { display: none !important; }
     </button>
     <button class="link-btn" id="sendSkip" type="button" style="justify-self:center">דלג לפריט הבא</button>
     <p class="lede web-only" style="font-size:.9375rem" id="sendTip">בתמונה הראשונה בוחרים את הצ'אט בוואטסאפ. מהשנייה והלאה הוא מופיע בדרך כלל ראשון במסך השיתוף.</p>
-    <p class="lede app-only" style="font-size:.9375rem">בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.</p>
+    <p class="lede app-only" style="font-size:.9375rem" id="appTip">בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.</p>
+    <div class="card app-only" id="bubbleInvite" hidden>
+      <p style="font-weight:600">כפתור "הבא" מעל וואטסאפ</p>
+      <p class="lede" style="font-size:.9375rem">אחרי "שלח" לוחצים עליו וחוזרים ישר לתמונה הבאה, בלי "חזור" פעמיים. צריך לאשר פעם אחת: "הצגה מעל אפליקציות אחרות".</p>
+      <div class="row">
+        <button class="btn btn-ink btn-small" id="bubbleOn" type="button">הפעל</button>
+        <button class="btn btn-ghost btn-small" id="bubbleNo" type="button">לא עכשיו</button>
+      </div>
+    </div>
     <p class="via app-only" id="via"></p>
   </div>
   <div id="sendDone" class="card" hidden>
@@ -589,7 +597,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 8;
+  var VERSION = 9;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -1306,6 +1314,7 @@ html:not(.native) .app-only { display: none !important; }
   function startSend(b) {
     showSendStatus('');
     cancelAutoNext();
+    paintBubbleInvite();
     if (NATIVE) {
       var pkg = waPkg(), apps = nativeInfo.apps || [], via = $('via');
       via.textContent = '';
@@ -1387,6 +1396,31 @@ html:not(.native) .app-only { display: none !important; }
       showSendStatus('השליחה לא הצליחה. נסה שוב.', 'warn');
     });
   });
+  /* ---------- Android app: the floating "next" button over WhatsApp ---------- */
+  var HAS_BUBBLE = !!(NATIVE && typeof NATIVE.overlayAllowed === 'function');
+  function bubbleOn() { try { return HAS_BUBBLE && NATIVE.overlayAllowed(); } catch (e) { return false; } }
+  function paintBubbleInvite() {
+    if (!HAS_BUBBLE) return;
+    var no = false; try { no = localStorage.getItem('bcwa.bubbleNo') === '1'; } catch (e) {}
+    var on = bubbleOn();
+    $('bubbleInvite').hidden = on || no;
+    $('appTip').textContent = on ? 'בוואטסאפ לוחצים שלח, ואז על הכפתור הירוק "הבא". התמונה הבאה נפתחת מיד.'
+      : 'בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.';
+  }
+  $('bubbleOn').addEventListener('click', function () { try { NATIVE.requestOverlay(); } catch (e) {} });
+  $('bubbleNo').addEventListener('click', function () {
+    try { localStorage.setItem('bcwa.bubbleNo', '1'); } catch (e) {}
+    paintBubbleInvite();
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && current.view === 'send') paintBubbleInvite();   // back from the settings screen
+  });
+  function bubbleLabel(b, it) {
+    var nx = nextUnsent(b.items, b.items.indexOf(it) + 1);
+    if (nx < 0 || b.items[nx] === it) return 'סיום \u2713';
+    return 'הבא \u2039 ' + (nx + 1) + '/' + b.items.length;
+  }
+
   /* ---------- Android app: straight into the recipient's chat ---------- */
   var nativePending = null, autoTimer = 0;
   function blobToB64(blob) {
@@ -1405,6 +1439,7 @@ html:not(.native) .app-only { display: none !important; }
     try {
       var b64 = await blobToB64(rec.full);
       nativePending = { b: b, it: it };
+      if (HAS_BUBBLE) { try { NATIVE.setBubbleLabel(bubbleLabel(b, it)); } catch (e) {} }
       var err = NATIVE.send(waPkg(), b.phone, it.code, safeName(it.code), b64);
       if (err) { nativePending = null; $('sendNext').disabled = false; showSendStatus(err, 'warn'); }
     } catch (e) {
@@ -1414,7 +1449,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   function cancelAutoNext() { clearTimeout(autoTimer); autoTimer = 0; $('autoNext').hidden = true; }
   // Called by the app when the person comes back from WhatsApp. code: Activity result (-1 OK, 0 canceled).
-  async function nativeReturned(code) {
+  async function nativeReturned(code, viaBubble) {
     var p = nativePending; nativePending = null;
     if (!p) return;
     diag.last = 'חזרה מוואטסאפ, קוד ' + code; paintDiag();
@@ -1438,7 +1473,7 @@ html:not(.native) .app-only { display: none !important; }
     autoTimer = setTimeout(function () {
       $('autoNext').hidden = true;
       if (current.view === 'send' && current.batch === b && b.items[sendIdx] === it) nativeSend(b, it);
-    }, 1300);
+    }, viaBubble ? 300 : 1300);
   }
   $('autoStop').addEventListener('click', function () { cancelAutoNext(); showSendStatus('נעצר. לחץ "שלח" כדי להמשיך.'); });
 
@@ -1487,7 +1522,7 @@ html:not(.native) .app-only { display: none !important; }
       if (!ph) { alertLike('המספר של איש הקשר לא נראה תקין: ' + raw); return; }
       chooseRecip({ name: name || '', phone: ph });
     },
-    returned: function (code) { nativeReturned(code); },
+    returned: function (code, viaBubble) { nativeReturned(code, !!viaBubble); },
     // The app's scanner found a code: store it like a web scan and report back what happened.
     scanItem: function (code, format, url) { nativeScanItem(code, format, url); },
     scanDone: function (reason) {

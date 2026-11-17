@@ -67,6 +67,7 @@ public class MainActivity extends ComponentActivity {
 
     private WebView web;
     private ScanOverlay scanOverlay;
+    private NextBubble bubble;
     private int pendingScanCount = 0;
     private String pendingScanTitle = "";
     private PermissionRequest pendingCamera;
@@ -83,6 +84,7 @@ public class MainActivity extends ComponentActivity {
         root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         keepClearOfSystemBars(root);
         setContentView(root);
+        bubble = new NextBubble(this);
         scanOverlay = new ScanOverlay(this, root, new ScanOverlay.Listener() {
             @Override
             public void onCode(String code, String format, String fileName) {
@@ -289,10 +291,18 @@ public class MainActivity extends ComponentActivity {
     protected void onResume() {
         super.onResume();
         web.onResume();
+        bubble.hide();
+        boolean viaBubble = bubble.consumeTapped();
         if (waitingWhatsApp) {
             waitingWhatsApp = false;
-            js("window.__bcwaNative && window.__bcwaNative.returned(" + whatsAppResult + ")");
+            js("window.__bcwaNative && window.__bcwaNative.returned(" + whatsAppResult + "," + viaBubble + ")");
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (bubble != null) bubble.hide();
+        super.onDestroy();
     }
 
     @Override
@@ -378,14 +388,24 @@ public class MainActivity extends ComponentActivity {
             i.setPackage(pkg);
             i.putExtra("jid", phone + "@s.whatsapp.net");
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            final boolean floating = NextBubble.allowed(MainActivity.this);
             runOnUiThread(() -> {
                 try {
                     waitingWhatsApp = true;
                     whatsAppResult = RESULT_OK;
-                    startActivityForResult(i, REQ_SEND);
+                    if (floating) {
+                        // WhatsApp opens in its own task, so the "next" bubble can bring this app back
+                        // without WhatsApp's screens piling up under it.
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        bubble.show();
+                        startActivity(i);
+                    } else {
+                        startActivityForResult(i, REQ_SEND);
+                    }
                 } catch (ActivityNotFoundException e) {
                     waitingWhatsApp = false;
-                    js("window.__bcwaNative && window.__bcwaNative.returned(0)");
+                    bubble.hide();
+                    js("window.__bcwaNative && window.__bcwaNative.returned(0,false)");
                 }
             });
             return "";
@@ -430,6 +450,30 @@ public class MainActivity extends ComponentActivity {
         @JavascriptInterface
         public void scanResult(String status, String text, int count) {
             runOnUiThread(() -> scanOverlay.onResult(status, text, count));
+        }
+
+        /** Whether the floating "next" button may be shown over WhatsApp. */
+        @JavascriptInterface
+        public boolean overlayAllowed() {
+            return NextBubble.allowed(MainActivity.this);
+        }
+
+        /** Opens the system screen where the person allows "display over other apps". */
+        @JavascriptInterface
+        public void requestOverlay() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+                } catch (ActivityNotFoundException e) {
+                    try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)); } catch (ActivityNotFoundException ignored) { }
+                }
+            });
+        }
+
+        /** Text on the floating button for the photo about to be sent, e.g. "הבא ‹ 4/10". */
+        @JavascriptInterface
+        public void setBubbleLabel(String text) {
+            runOnUiThread(() -> bubble.setLabel(text));
         }
 
         @JavascriptInterface
