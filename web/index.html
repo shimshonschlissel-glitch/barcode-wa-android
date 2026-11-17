@@ -291,7 +291,7 @@ html:not(.native) .app-only { display: none !important; }
   <footer class="foot">
     <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
     <details class="diag">
-      <summary>פרטי אבחון (גרסה 7)</summary>
+      <summary>פרטי אבחון (גרסה 8)</summary>
       <p id="diag" dir="auto"></p>
     </details>
   </footer>
@@ -319,6 +319,7 @@ html:not(.native) .app-only { display: none !important; }
     <button class="btn btn-ink btn-small" id="scanMore" type="button">סרוק פריטים</button>
     <button class="btn btn-ghost btn-small" id="photoItem" type="button"><span class="web-only">צלם פריט</span><span class="app-only">מתמונה</span></button>
   </div>
+  <p class="status" id="batchStatus" role="status" aria-live="polite"></p>
   <ul class="grid" id="itemGrid"></ul>
   <p class="empty" id="gridEmpty">עוד לא נסרקו פריטים.</p>
   <div class="links">
@@ -469,8 +470,11 @@ html:not(.native) .app-only { display: none !important; }
     QRCode: 'QR', QRCodeModel2: 'QR', MicroQRCode: 'Micro QR', DataMatrix: 'Data Matrix', PDF417: 'PDF417',
     Aztec: 'Aztec', AztecCode: 'Aztec'
   };
-  var WASM_FORMATS = ['EAN13', 'EAN8', 'UPCA', 'UPCE', 'Code128', 'Code39', 'Code93', 'ITF', 'Codabar', 'DataBar',
-    'QRCode', 'DataMatrix', 'PDF417', 'Aztec'];
+  // Only the kinds of barcode found on shipping labels: fewer formats, faster reads.
+  var WASM_FORMATS = ['Code128', 'Code39', 'Code93', 'ITF', 'Codabar', 'EAN13', 'EAN8', 'UPCA', 'UPCE',
+    'QRCode', 'DataMatrix', 'PDF417'];
+  var NATIVE_FORMATS = ['code_128', 'code_39', 'code_93', 'itf', 'codabar', 'ean_13', 'ean_8', 'upc_a', 'upc_e',
+    'qr_code', 'data_matrix', 'pdf417'];
   var MATRIX = { 'QR': 1, 'Micro QR': 1, 'Data Matrix': 1, 'PDF417': 1, 'Aztec': 1 };
 
   // Backup-engine results: valid only, no duplicates, with the code's centre.
@@ -489,6 +493,15 @@ html:not(.native) .app-only { display: none !important; }
       out.push({ value: r.text, format: name, strong: !!MATRIX[name] || (r.lineCount || 0) >= 6, cx: cx, cy: cy });
     });
     return out;
+  }
+
+  // How many matching reads in a row before a code is accepted. 2D codes carry error correction,
+  // so one read is enough; 1D codes with a check digit need two; the rest three.
+  var CHECKED_1D = { 'Code 128': 1, 'EAN-13': 1, 'EAN-8': 1, 'UPC-A': 1, 'UPC-E': 1, 'ITF': 1, 'ITF-14': 1 };
+  function needReads(format) {
+    if (MATRIX[format]) return 1;
+    if (CHECKED_1D[format]) return 2;
+    return 3;
   }
 
   // Of several codes in the frame, the one whose centre is nearest the middle. Codes without a position come last.
@@ -576,7 +589,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 7;
+  var VERSION = 8;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -590,6 +603,7 @@ html:not(.native) .app-only { display: none !important; }
     try { nativeInfo = JSON.parse(NATIVE.info()); } catch (e) {}
     document.documentElement.classList.add('native');
   }
+  var NATIVE_SCAN = !!(NATIVE && typeof NATIVE.startScan === 'function');   // app 1.1+: fast ML Kit scanner
   var WA_NAMES = { 'com.whatsapp': 'WhatsApp', 'com.whatsapp.w4b': 'WhatsApp Business' };
   function waPkg() {
     var apps = nativeInfo.apps || [], pref = null;
@@ -697,7 +711,8 @@ html:not(.native) .app-only { display: none !important; }
     if (!('BarcodeDetector' in window)) { diag.native = 'אין בדפדפן הזה'; return; }
     try {
       var formats = await window.BarcodeDetector.getSupportedFormats();
-      if (formats && formats.length) { nativeDet = new window.BarcodeDetector({ formats: formats }); diag.native = formats.length + ' פורמטים'; }
+      var wanted = (formats || []).filter(function (f) { return NATIVE_FORMATS.indexOf(f) >= 0; });
+      if (wanted.length) { nativeDet = new window.BarcodeDetector({ formats: wanted }); diag.native = wanted.length + ' פורמטים'; }
       else diag.native = 'קיים אבל לא פעיל';
     } catch (e) { diag.native = 'שגיאה (' + (e && e.name) + ')'; }
   })();
@@ -859,6 +874,11 @@ html:not(.native) .app-only { display: none !important; }
     ['vHome', 'vBatch', 'vScan', 'vSend'].forEach(function (id) { $(id).hidden = true; });
     if (view === 'home') { cleanupEmpty(); renderHome(); $('vHome').hidden = false; }
     else if (view === 'batch') { renderBatch(b); $('vBatch').hidden = false; }
+    else if (view === 'scan' && NATIVE_SCAN) {
+      renderBatch(b); $('vBatch').hidden = false;
+      setBatchStatus('');
+      try { NATIVE.startScan(String(b.items.length), b.name || ''); } catch (e) { goBack('#b-' + b.id); }
+    }
     else if (view === 'scan') { $('vScan').hidden = false; startScanner(b); }
     else if (view === 'send') { $('vSend').hidden = false; startSend(b); }
     window.scrollTo(0, 0);
@@ -1211,7 +1231,7 @@ html:not(.native) .app-only { display: none !important; }
       frames++;
       var vw = cam.videoWidth, vh = cam.videoHeight, box = $('camBox');
       var r = aimRect(vw, vh, box.clientWidth || vw, box.clientHeight || vh, AIM_FX, AIM_FY);
-      var k = Math.min(1, 1100 / r.w);
+      var k = Math.min(1, 800 / r.w);
       crop.width = Math.max(1, Math.round(r.w * k)); crop.height = Math.max(1, Math.round(r.h * k));
       cctx.drawImage(cam, r.x, r.y, r.w, r.h, 0, 0, crop.width, crop.height);
       var engine = 'מובנה', found = nativeDet ? await nativeRead(crop) : null;
@@ -1232,7 +1252,7 @@ html:not(.native) .app-only { display: none !important; }
       if (hit.value === held) { heldAt = now; continue; }     // still looking at the code just handled
       if (hit.value === cand) count++; else { cand = hit.value; count = 1; }
       candAt = now;
-      if (count < 3) { scanMessage('נקרא, מאמת…'); continue; }
+      if (count < needReads(hit.format)) { scanMessage('נקרא, מאמת…'); continue; }
       cand = null; count = 0; held = hit.value; heldAt = now;
       diag.last = 'קריאה אחרונה: ' + engine + ', סריקה חיה, ' + frames + ' פריימים, ' + Math.round(now - started) + 'ms, וידאו ' + vw + '×' + vh;
       await acceptCode(b, hit, vw, vh);
@@ -1280,6 +1300,7 @@ html:not(.native) .app-only { display: none !important; }
      Send: one item at a time, the number as the caption
      ========================================================= */
   var sendIdx = -1, sendFile = null, sendPhotoUrl = null;
+  function setBatchStatus(t, kind) { var s = $('batchStatus'); s.textContent = t || ''; if (kind) s.dataset.kind = kind; else delete s.dataset.kind; }
   function showSendStatus(t, kind) { var s = $('sendStatus'); s.textContent = t || ''; if (kind) s.dataset.kind = kind; else delete s.dataset.kind; }
 
   function startSend(b) {
@@ -1466,8 +1487,37 @@ html:not(.native) .app-only { display: none !important; }
       if (!ph) { alertLike('המספר של איש הקשר לא נראה תקין: ' + raw); return; }
       chooseRecip({ name: name || '', phone: ph });
     },
-    returned: function (code) { nativeReturned(code); }
+    returned: function (code) { nativeReturned(code); },
+    // The app's scanner found a code: store it like a web scan and report back what happened.
+    scanItem: function (code, format, url) { nativeScanItem(code, format, url); },
+    scanDone: function (reason) {
+      var b = current.batch;
+      if (current.view === 'scan' && b) goBack('#b-' + b.id);
+      if (reason === 'denied') setBatchStatus('אין הרשאה למצלמה. אפשר לאשר אותה בהגדרות הטלפון: אפליקציות, ברקוד לוואטסאפ, הרשאות.', 'warn');
+    }
   };
+  async function nativeScanItem(code, format, url) {
+    var b = current.batch;
+    var reply = function (status, msg) { try { NATIVE.scanResult(status, msg, b ? b.items.length : 0); } catch (e) {} };
+    if (!b || current.view !== 'scan') { reply('error', 'אין משלוח פתוח.'); return; }
+    code = cleanCode(code);
+    if (!code) { reply('error', 'המספר ריק.'); return; }
+    var f = findCode(code);
+    if (f.here >= 0) { reply('dup', 'כבר ברשימה (פריט ' + (f.here + 1) + '): ' + code); return; }
+    try {
+      var blob = await fetch(url).then(function (r) { if (!r.ok) throw new Error('fetch'); return r.blob(); });
+      var bmp = await createImageBitmap(blob);
+      var thumb = region(bmp, 0, 0, bmp.width, bmp.height, 320, false, false);
+      if (bmp.close) bmp.close();
+      var tb = await new Promise(function (r) { thumb.toBlob(r, 'image/jpeg', 0.72); });
+      await addItem(b, code, format, { full: blob, thumb: tb });
+      diag.last = 'קריאה אחרונה: ' + (typeof NATIVE.scanStats === 'function' ? NATIVE.scanStats() : 'סורק האפליקציה'); paintDiag();
+      if (f.other) reply('warn', 'נוסף. שים לב: נסרק גם במשלוח "' + displayName(f.other) + '".');
+      else reply('ok', 'נוסף: ' + code);
+    } catch (e) {
+      reply('error', 'התמונה לא נשמרה. נסה שוב.');
+    }
+  }
   function alertLike(t) { showSendStatus(t, 'warn'); }
 
   $('sendSkip').addEventListener('click', function () {

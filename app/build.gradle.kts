@@ -22,8 +22,11 @@ android {
         applicationId = "com.barcodewa.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+
+        // Phones only: keeps the ML Kit native code to the two ARM builds.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     sourceSets["main"].assets.srcDir(webAssets)
@@ -41,7 +44,10 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            // Shrinks the camera and ML Kit libraries to what the app uses.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (keystorePath != null) signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -55,6 +61,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation("androidx.activity:activity:1.9.3")
+    implementation("androidx.camera:camera-core:1.4.1")
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.camera:camera-view:1.4.1")
+    // The barcode model is bundled in the app, so scanning works offline and without Google Play services.
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    testImplementation("junit:junit:4.13.2")
 }
 
 tasks.named("preBuild") { dependsOn(syncWeb) }

@@ -1,7 +1,6 @@
 package com.barcodewa.app;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Intent;
@@ -29,6 +28,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import androidx.activity.ComponentActivity;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -49,7 +50,7 @@ import java.util.Map;
  * The page talks to it through the "BarcodeWA" bridge for the things a web page cannot do:
  * open WhatsApp straight in one chat with a photo and caption, pick a contact, share an export file.
  */
-public class MainActivity extends Activity {
+public class MainActivity extends ComponentActivity {
 
     static final String HOST = "appassets.androidplatform.net";
     static final String START = "https://" + HOST + "/index.html";
@@ -59,8 +60,15 @@ public class MainActivity extends Activity {
     private static final int REQ_SEND = 2;
     private static final int REQ_FILE = 3;
     private static final int REQ_CAMERA = 4;
+    private static final int REQ_SCAN = 5;
+
+    /** How the last native scan went, for the page's diagnostics line. */
+    static volatile String lastScanInfo = "";
 
     private WebView web;
+    private ScanOverlay scanOverlay;
+    private int pendingScanCount = 0;
+    private String pendingScanTitle = "";
     private PermissionRequest pendingCamera;
     private ValueCallback<Uri[]> fileCallback;
     private boolean waitingWhatsApp = false;
@@ -75,6 +83,18 @@ public class MainActivity extends Activity {
         root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         keepClearOfSystemBars(root);
         setContentView(root);
+        scanOverlay = new ScanOverlay(this, root, new ScanOverlay.Listener() {
+            @Override
+            public void onCode(String code, String format, String fileName) {
+                js("window.__bcwaNative && window.__bcwaNative.scanItem(" + JSONObject.quote(code) + "," + JSONObject.quote(format)
+                        + "," + JSONObject.quote("https://" + HOST + "/__scan/" + fileName) + ")");
+            }
+
+            @Override
+            public void onClosed() {
+                js("window.__bcwaNative && window.__bcwaNative.scanDone('')");
+            }
+        });
         darkSystemBarIcons();
 
         WebSettings ws = web.getSettings();
@@ -136,6 +156,14 @@ public class MainActivity extends Activity {
             Map<String, String> headers = new HashMap<>();
             headers.put("Cache-Control", "no-cache");
             if (path.contains("..")) return notFound(headers);
+            if (path.startsWith("/__scan/")) {
+                try {
+                    File f = new File(new File(getCacheDir(), "scans"), path.substring("/__scan/".length()));
+                    return new WebResourceResponse("image/jpeg", null, 200, "OK", headers, new java.io.FileInputStream(f));
+                } catch (IOException e) {
+                    return notFound(headers);
+                }
+            }
             try {
                 InputStream in = getAssets().open("www" + path);
                 String mime = mimeFor(path);
@@ -212,6 +240,11 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int req, String[] perms, int[] results) {
         super.onRequestPermissionsResult(req, perms, results);
+        if (req == REQ_SCAN) {
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) scanOverlay.show(pendingScanCount, pendingScanTitle);
+            else js("window.__bcwaNative && window.__bcwaNative.scanDone('denied')");
+            return;
+        }
         if (req != REQ_CAMERA || pendingCamera == null) return;
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
             pendingCamera.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
@@ -265,6 +298,7 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
+        if (scanOverlay != null && scanOverlay.isShowing()) { scanOverlay.close(); return; }
         // Close an open dialog first, then step back through the app's screens, then leave.
         web.evaluateJavascript("(function(){var d=document.querySelector('dialog[open]');if(d){d.close();return 1}return 0})()", v -> {
             if ("1".equals(v)) return;
@@ -374,6 +408,33 @@ public class MainActivity extends Activity {
                     try { startActivity(chooser); } catch (ActivityNotFoundException ignored) { }
                 });
             } catch (IOException ignored) { }
+        }
+
+        /** Opens the app's own scanner over the page. Codes come back through window.__bcwaNative.scanItem. */
+        @JavascriptInterface
+        public void startScan(String count, String title) {
+            runOnUiThread(() -> {
+                int n;
+                try { n = Integer.parseInt(count); } catch (NumberFormatException e) { n = 0; }
+                if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                    scanOverlay.show(n, title);
+                } else {
+                    pendingScanCount = n;
+                    pendingScanTitle = title;
+                    requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_SCAN);
+                }
+            });
+        }
+
+        /** The page's answer about the last scanned code: ok, warn, dup or error. */
+        @JavascriptInterface
+        public void scanResult(String status, String text, int count) {
+            runOnUiThread(() -> scanOverlay.onResult(status, text, count));
+        }
+
+        @JavascriptInterface
+        public String scanStats() {
+            return lastScanInfo;
         }
 
         @JavascriptInterface

@@ -1,7 +1,7 @@
 # ברקוד לוואטסאפ: מסמך הפרויקט
 
 המסמך הזה מסכם את כל מה שצריך כדי להמשיך לעבוד על הפרויקט בכל שיחה חדשה. כדאי לעדכן אותו בסוף כל סבב עבודה.
-עודכן לאחרונה: 17.11.2026 (גרסת אתר 7, אפליקציה 1.0). האתר עבר מ-Netlify ל-GitHub Pages.
+עודכן לאחרונה: 17.11.2026 (גרסת אתר 8, אפליקציה 1.1). האתר ב-GitHub Pages. באפליקציה סורק מהיר עם ML Kit.
 
 ## מה זה
 
@@ -24,7 +24,7 @@
 
 - `CLAUDE.md`: המסמך הזה.
 - `site\`: ארכיון של מה שעלה ל-Netlify עד גרסה 6. לא בשימוש יותר: האתר מתפרסם לבד מ-GitHub.
-- `source\`: כל הקוד: `web\` (האתר), `app\` (אפליקציית האנדרואיד), `tester\` (אפליקציית הבדיקה החד-פעמית).
+- `source\`: עותק של כל הקוד: `web\` (האתר), `app\` (אפליקציית האנדרואיד), `tester\` (אפליקציית הבדיקה החד-פעמית). המקור המעודכן הוא GitHub.
 - `source.bundle`: כל היסטוריית הגרסאות של הקוד (git). לשחזור: `git clone source.bundle`.
 
 **אסור** לשים את מפתח החתימה ב-GitHub או בתיקיית `dist/`: הם ציבוריים.
@@ -45,21 +45,26 @@
 
 - תצוגות לפי כתובת: `#` משלוחים, `#b-<id>` משלוח, `#b-<id>-scan` סריקה, `#b-<id>-send` שליחה.
 - שמירה: IndexedDB (`bcwa`: `batches` עם רשימת פריטים, `photos` עם תמונה מלאה וממוזערת). מסלול חלופי בזיכרון אם אין IndexedDB.
-- זיהוי: קודם `BarcodeDetector` של כרום (מהיר), ואם אין, zxing-wasm 3.1.6 (`zxing-reader.js` + `zxing_reader.wasm`, נטענים מהאתר עצמו).
-- סריקה חיה: קוראים רק את האזור שבתוך המסגרת (86%×34% מהתצוגה), בוחרים את הקוד הקרוב למרכז, ומקבלים אותו רק אחרי 3 קריאות זהות. כפילות במשלוח: אזהרה, לא נוסף.
+- זיהוי באתר: קודם `BarcodeDetector` של כרום (מהיר), ואם אין, zxing-wasm 3.1.6 (`zxing-reader.js` + `zxing_reader.wasm`, נטענים מהאתר עצמו). רק סוגי ברקוד של תוויות (Code 128/39/93, ITF, Codabar, EAN/UPC, QR, Data Matrix, PDF417).
+- סריקה חיה: קוראים רק את האזור שבתוך המסגרת (86%×34% מהתצוגה, מוקטן ל-800 פיקסלים), בוחרים את הקוד הקרוב למרכז, ומקבלים אותו אחרי מספר קריאות זהות לפי הסוג: QR/Data Matrix/PDF417 אחת, Code 128/EAN/UPC/ITF שתיים, אחרים שלוש. כפילות במשלוח: אזהרה, לא נוסף.
 - שליחה באתר: Web Share, תמונה אחת עם המספר ככיתוב. באייפון וואטסאפ זורק את הכיתוב, ולכן שם המספר מועתק ללוח.
 - ייצוא: CSV לאקסל (BOM, מספרים כטקסט `="..."`).
-- `sw.js`: עבודה בלי אינטרנט. **בכל שינוי באתר מעלים את `VERSION` ב-sw.js** (כרגע `v6`).
+- `sw.js`: עבודה בלי אינטרנט. **בכל שינוי באתר מעלים את `VERSION` ב-sw.js** (כרגע `v8`).
 - גרסת האתר מוצגת בתחתית: "פרטי אבחון (גרסה N)". לעדכן גם את `VERSION` בקוד וגם את הכותרת.
 
 ### אפליקציית האנדרואיד (`app/`)
 
 - מעטפת WebView סביב האתר. קבצי `web/` נארזים בתוך האפליקציה (`assets/www`) ומוגשים מהכתובת הפרטית `https://appassets.androidplatform.net/`. האפליקציה עובדת בלי אינטרנט ולא תלויה ב-Netlify.
-- גשר `window.BarcodeWA` (Java → `MainActivity.Bridge`): `info()`, `pickContact()`, `send(pkg, phone, caption, fileName, base64)`, `share(name, mime, text)`, `keepScreenOn(bool)`.
-  תשובות חוזרות לדף דרך `window.__bcwaNative.contact(name, phone)` ו-`window.__bcwaNative.returned(code)`.
+- גשר `window.BarcodeWA` (Java → `MainActivity.Bridge`): `info()`, `pickContact()`, `send(pkg, phone, caption, fileName, base64)`, `share(name, mime, text)`, `keepScreenOn(bool)`,
+  ומגרסה 1.1: `startScan(count, title)`, `scanResult(status, text, count)`, `scanStats()`.
+  תשובות חוזרות לדף דרך `window.__bcwaNative`: `contact(name, phone)`, `returned(code)`, `scanItem(code, format, url)`, `scanDone(reason)`.
+- **סורק מקומי (1.1):** `ScanOverlay` מצייר מסך סריקה מעל הדף: CameraX (תצוגה + ניתוח 1280×720) ו-ML Kit barcode-scanning 17.3.0 (המודל ארוז באפליקציה, עובד בלי אינטרנט).
+  כללי הבחירה והאישור ב-`ScanLogic` (זהים לאתר, עם בדיקות יחידה ב-`app/src/test`). כל קוד שאושר נשמר כ-JPEG של הפריים ב-`cache/scans`,
+  מוגש לדף בכתובת `https://appassets.androidplatform.net/__scan/<קובץ>`, והדף שומר אותו ועונה ok/dup/warn/error. הדף אחראי לכפילויות ולמשלוחים.
+  אם האפליקציה ישנה (אין `startScan`), הדף חוזר לסורק של האתר.
 - שליחה: Intent `ACTION_SEND` עם `setPackage(com.whatsapp / com.whatsapp.w4b)` ו-`jid = <מספר>@s.whatsapp.net` פותח את וואטסאפ **ישר בצ'אט** עם התמונה והכיתוב. כשחוזרים לאפליקציה, הבאה נפתחת לבד אחרי 1.3 שניות (עם כפתור "עצור").
 - נמענים שנבחרו נשמרים (`localStorage: bcwa.recips`). מספרים מקומיים מקבלים 972.
-- applicationId: `com.barcodewa.app`. גרסה: `versionCode`/`versionName` ב-`app/build.gradle.kts`.
+- applicationId: `com.barcodewa.app`. גרסה: `versionCode`/`versionName` ב-`app/build.gradle.kts` (כרגע 2 / 1.1). AndroidX, R8 (כיווץ קוד; הגשר נשמר ב-`proguard-rules.pro`), רק ARM.
 
 ### תוצאות בדיקה על הטלפון של שמשון (WhatsApp Business), 17.11.2026
 
@@ -88,13 +93,13 @@ Netlify כבר לא בשימוש. בפרויקט שם יש רק הפניה לכ�
 2. מפתח החתימה: מורידים מתיקיית `barcode-wa-key` ב-Drive, ומגדירים ב-`~/.gradle/gradle.properties`:
    `bcwa.keystore`, `bcwa.storePassword`, `bcwa.keyAlias=barcode-wa`, `bcwa.keyPassword` (הסיסמה ב-README.txt שליד המפתח).
 3. **מעלים את `versionCode`** ב-`app/build.gradle.kts` (אחרת הטלפון לא יתקין עדכון).
-4. `gradle :app:assembleRelease` ← `app/build/outputs/apk/release/app-release.apk`.
+4. `gradle :app:testDebugUnitTest :app:assembleRelease` ← `app/build/outputs/apk/release/app-release.apk` (כ-11MB, רובו מנוע ה-ML Kit).
 5. מעתיקים ל-`dist/barcode-wa.apk` ודוחפים. האתר יתעדכן לבד, וקישור ההורדה יגיש את הגרסה החדשה.
 6. **חייבים לחתום באותו מפתח.** במפתח אחר הטלפון יסרב לעדכן, ובהתקנה מחדש יימחקו המשלוחים.
 
 ## פתוח / לא נבדק עדיין
 
-- המצלמה בתוך האפליקציה (אישור ההרשאה, מהירות). כנראה אין `BarcodeDetector` ב-WebView, אז רץ מנוע הגיבוי.
+- הסורק המקומי (1.1) לא נבדק עדיין על טלפון: הרשאת מצלמה, מהירות, פנס, הקלדה ידנית. שורת האבחון מראה "ML Kit, N פריימים, X ms מהקודם".
 - וואטסאפ רגיל (לא Business) אצל מישהו אחר.
 - מה וואטסאפ מחזיר כשחוזרים בלי לשלוח (האפליקציה מניחה ש-`0` = לא נשלח).
 - `.github/workflows/build.yml` בונה רק לבדיקה שהקוד מתקמפל. האפליקציה להפצה נבנית ונחתמת מקומית.
@@ -115,6 +120,7 @@ Netlify כבר לא בשימוש. בפרויקט שם יש רק הפניה לכ�
 | אתר 5 | 17.11 | משלוחים, סריקה רצופה, שליחה אחת-אחת, היסטוריה וייצוא. כתובת barcode-wa |
 | אתר 6 + אפליקציה 1.0 | 17.11 | אפליקציית אנדרואיד עם שליחה ישירה לצ'אט, נמענים מאנשי הקשר |
 | אתר 7 | 17.11 | מעבר ל-GitHub Pages. נתיבים יחסיים ב-manifest |
+| אתר 8 + אפליקציה 1.1 | 17.11 | זיהוי מהיר יותר באתר (פחות אישורים, פחות פורמטים, תמונה קטנה). באפליקציה סורק מקומי עם ML Kit |
 
 ## הערות עבודה ל-Claude
 
