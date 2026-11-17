@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "barcode-wa-android"
-include(":app")
+include(":app", ":tester")

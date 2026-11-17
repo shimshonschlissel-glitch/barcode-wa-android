@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ברקוד לוואטסאפ</title>
+<meta name="description" content="סורקים ברקודים של משלוחים ושולחים כל תמונה בוואטסאפ עם המספר שלה ככיתוב.">
+<meta name="theme-color" content="#eef1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101613" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  /* Layout: one phone-width column per view. Lists of shipments, a dark camera view, a one-item send view. */
+  --paper: #eef1ec;
+  --surface: #ffffff;
+  --ink: #15211c;
+  --muted: #55635b;
+  --line: #cbd3ca;
+  --send: #0e7a44;
+  --send-ink: #ffffff;
+  --laser: #d93a25;
+  --warn-bg: #fff0d2;
+  --warn-ink: #6a4200;
+  --ok-bg: #dcf2e4;
+  --ok-ink: #0b5a32;
+  --bad-ink: #a32012;
+  --font-body: "IBM Plex Sans Hebrew", "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #101613; --surface: #19221d; --ink: #e8eee8; --muted: #9eaca3; --line: #2e3a33;
+    --send: #2db56c; --send-ink: #04140b; --laser: #ff5b45;
+    --warn-bg: #3a2c0c; --warn-ink: #ffd68c; --ok-bg: #12301f; --ok-ink: #9be2b9; --bad-ink: #ff8a7a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #101613; --surface: #19221d; --ink: #e8eee8; --muted: #9eaca3; --line: #2e3a33;
+  --send: #2db56c; --send-ink: #04140b; --laser: #ff5b45;
+  --warn-bg: #3a2c0c; --warn-ink: #ffd68c; --ok-bg: #12301f; --ok-ink: #9be2b9; --bad-ink: #ff8a7a;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1.0625rem/1.5 var(--font-body);
+  -webkit-text-size-adjust: 100%;
+}
+.view {
+  max-width: 30rem;
+  min-height: 100%;
+  margin-inline: auto;
+  padding: 18px 16px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+h1, h2 { margin: 0; text-wrap: balance; }
+h1 { font: 700 1.75rem/1.15 var(--font-body); letter-spacing: -0.01em; }
+h2 { font: 600 1.0625rem/1.3 var(--font-body); color: var(--muted); }
+p { margin: 0; }
+.lede { color: var(--muted); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--laser); outline-offset: 3px; }
+
+/* buttons */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 56px; padding: 10px 18px;
+  border: 2px solid transparent; border-radius: 14px;
+  font: 600 1.125rem/1.2 var(--font-body); text-decoration: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn svg { width: 24px; height: 24px; flex: none; }
+.btn-ink { background: var(--ink); color: var(--paper); }
+.btn-send { background: var(--send); color: var(--send-ink); }
+.btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn-small { min-height: 44px; font-size: 1rem; border-radius: 12px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+.link-btn {
+  min-height: 44px; padding: 8px 10px; border: 0; background: none; color: var(--muted);
+  font: 500 1rem/1.2 var(--font-body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; }
+.back {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 6px 4px; border: 0; background: none; color: var(--ink);
+  font: 600 1rem/1.2 var(--font-body); cursor: pointer;
+}
+.back svg { width: 20px; height: 20px; }
+
+/* cards and lists */
+.card {
+  display: grid; gap: 10px; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--surface);
+}
+.note { padding: 10px 14px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-ink); font-size: 0.9375rem; }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.shipment {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px;
+  width: 100%; padding: 14px 16px; text-align: start;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink);
+  font: inherit; cursor: pointer;
+}
+.shipment .name { font-weight: 600; overflow-wrap: anywhere; }
+.shipment .meta { grid-column: 1; font-size: 0.875rem; color: var(--muted); }
+.shipment .count { grid-row: 1 / span 2; grid-column: 2; font: 600 1.25rem/1 var(--font-mono); }
+.pill {
+  display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 0.8125rem; font-weight: 600;
+  background: var(--ok-bg); color: var(--ok-ink);
+}
+.pill.wait { background: var(--warn-bg); color: var(--warn-ink); }
+.empty { color: var(--muted); font-size: 0.9375rem; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+
+/* onboarding */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 1.9rem 1fr; gap: 10px; align-items: start; }
+.steps li::before {
+  content: counter(step); display: grid; place-items: center; width: 1.9rem; height: 1.9rem;
+  border: 1.5px solid var(--ink); border-radius: 50%; font: 600 0.875rem/1 var(--font-mono);
+}
+.steps span { padding-top: 0.15rem; }
+
+/* shipment view */
+.name-input {
+  width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px;
+  background: var(--surface); color: var(--ink); font: 600 1.125rem/1.3 var(--font-body);
+}
+.summary { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 0.9375rem; }
+.grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
+.tile {
+  position: relative; display: grid; gap: 4px; width: 100%; padding: 0 0 6px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
+  overflow: hidden; cursor: pointer; font: inherit; text-align: center;
+}
+.tile img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #222; }
+.tile .code { padding: 0 6px; font: 600 0.75rem/1.25 var(--font-mono); overflow-wrap: anywhere; direction: ltr; }
+.tile .num {
+  position: absolute; top: 6px; inset-inline-start: 6px; min-width: 1.6rem; padding: 0 6px;
+  border-radius: 999px; background: rgba(0, 0, 0, 0.66); color: #fff; font: 600 0.75rem/1.6 var(--font-mono);
+}
+.tile .done {
+  position: absolute; top: 6px; inset-inline-end: 6px; display: grid; place-items: center;
+  width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--send); color: var(--send-ink);
+}
+.tile .done svg { width: 14px; height: 14px; }
+.sticky {
+  position: sticky; bottom: 0; margin-inline: -16px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--paper) 75%, transparent); display: grid; gap: 8px;
+}
+
+/* scanner: one dark world in both themes */
+.scan { background: #0b0f0d; color: #f1f4f1; max-width: none; padding-inline: 0; gap: 12px; }
+.scan > * { width: 100%; max-width: 30rem; margin-inline: auto; padding-inline: 16px; }
+.scan .back { color: #f1f4f1; }
+.cam-box { position: relative; height: min(58vh, 520px); padding: 0; overflow: hidden; border-radius: 0 0 18px 18px; background: #000; }
+.cam-box video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.aim {
+  position: absolute; left: 50%; top: 50%; width: 86%; height: 34%;
+  transform: translate(-50%, -50%); border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.42); outline: 3px solid rgba(255, 255, 255, 0.92);
+  pointer-events: none; transition: outline-color 0.15s;
+}
+.aim::after {
+  content: ""; position: absolute; inset-inline: 6%; top: 50%; height: 2px;
+  background: var(--laser); box-shadow: 0 0 10px var(--laser);
+}
+.cam-box[data-flash="ok"] .aim { outline-color: #2db56c; }
+.cam-box[data-flash="dup"] .aim { outline-color: #ffb020; }
+.scan-stats { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.counter { font: 700 2.25rem/1 var(--font-mono); }
+.counter small { font: 500 1rem/1 var(--font-body); color: #b4c0b8; margin-inline-start: 6px; }
+.last { font: 600 1rem/1.3 var(--font-mono); direction: ltr; text-align: left; color: #b4c0b8; overflow-wrap: anywhere; max-width: 60%; }
+.scan-msg { min-height: 1.5em; font-size: 0.9375rem; color: #c8d2cb; }
+.scan-msg[data-kind="ok"] { color: #8fe0b0; }
+.scan-msg[data-kind="warn"] { color: #ffd68c; }
+.scan > .btn { width: calc(100% - 32px); max-width: calc(30rem - 32px); }
+.scan .btn-ink { background: #f1f4f1; color: #0b0f0d; }
+.scan .btn-ghost { color: #f1f4f1; border-color: #3a4740; }
+.scan .link-btn { color: #b4c0b8; }
+
+/* send view */
+.send-photo { width: 100%; max-height: 42vh; object-fit: contain; border-radius: 12px; background: #111; display: block; }
+.send-code { font: 600 1.625rem/1.2 var(--font-mono); text-align: center; direction: ltr; overflow-wrap: anywhere; }
+.progress { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.progress div { height: 100%; width: 0; background: var(--send); transition: width 0.2s; }
+.progress-text { display: flex; justify-content: space-between; font-size: 0.9375rem; color: var(--muted); }
+.status { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 0.9375rem; }
+.status:empty { display: none; }
+.status[data-kind="ok"] { background: var(--ok-bg); color: var(--ok-ink); border-color: transparent; }
+.status[data-kind="warn"] { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
+
+/* dialogs */
+dialog {
+  width: min(28rem, calc(100% - 24px)); max-height: calc(100% - 24px); padding: 18px 16px;
+  border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--ink);
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+dialog form, .dlg { display: grid; gap: 12px; }
+dialog img { width: 100%; max-height: 40vh; object-fit: contain; border-radius: 10px; background: #111; }
+.field-label { font-size: 0.875rem; font-weight: 500; color: var(--muted); }
+.code-input {
+  width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink);
+  font: 600 1.375rem/1.2 var(--font-mono); text-align: center; letter-spacing: 0.03em;
+}
+.danger { color: var(--bad-ink); }
+.native .web-only { display: none !important; }
+html:not(.native) .app-only { display: none !important; }
+.recip { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px;
+  border: 2px solid var(--line); border-radius: 12px; background: var(--surface); }
+.recip .who { display: grid; gap: 2px; }
+.recip .who b { font-size: 1.0625rem; }
+.recip .who span { font: 500 0.875rem/1.2 var(--font-mono); color: var(--muted); direction: ltr; text-align: right; }
+.recip-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 38vh; overflow-y: auto; }
+.recip-list button { width: 100%; text-align: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; display: grid; gap: 2px; }
+.recip-list button span { font: 500 0.875rem/1.2 var(--font-mono); color: var(--muted); direction: ltr; text-align: right; }
+.text-input { width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--paper);
+  color: var(--ink); font: 500 1rem/1.3 var(--font-body); }
+.auto-next { display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px; background: var(--ok-bg); color: var(--ok-ink); }
+.via { font-size: 0.875rem; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.875rem; display: grid; gap: 6px; }
+.diag summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; }
+.diag p { margin-top: 4px; overflow-wrap: anywhere; font-size: 0.8125rem; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .progress div, .aim { transition: none; } }
+</style>
+</head>
+<body>
+
+<!-- ============ HOME ============ -->
+<section class="view" id="vHome">
+  <header style="display:grid;gap:4px">
+    <h1>ברקוד לוואטסאפ</h1>
+    <p class="lede">סורקים את הברקודים של המשלוח, ושולחים כל תמונה בוואטסאפ עם המספר שלה ככיתוב.</p>
+  </header>
+
+  <p class="note" id="noStore" hidden>השמירה בטלפון לא זמינה בדפדפן הזה. הרשימה תימחק כשתסגור את העמוד.</p>
+
+  <section class="card" id="onboard" hidden>
+    <h2 style="color:var(--ink)">איך זה עובד</h2>
+    <ol class="steps">
+      <li><span>"משלוח חדש", ומכוונים את המצלמה לברקוד של כל חבילה. כל ברקוד נשמר לבד.</span></li>
+      <li><span>בודקים את הרשימה ומתקנים מספר אם צריך.</span></li>
+      <li class="web-only"><span>"שלח בוואטסאפ", ובכל תמונה בוחרים את הצ'אט ולוחצים שלח. המספר מגיע ככיתוב.</span></li>
+      <li class="app-only"><span>"שלח בוואטסאפ": כל תמונה נפתחת ישר בצ'אט של הנמען עם המספר ככיתוב. לוחצים שלח, ואז חזור, והבאה נפתחת לבד.</span></li>
+    </ol>
+    <p class="lede" style="font-size:.9375rem">הכול נשמר רק בטלפון שלך. אין חשבון ואין שרת.</p>
+    <button class="btn btn-ghost btn-small web-only" id="install" type="button" hidden>התקן כאפליקציה</button>
+    <button class="link-btn" id="onboardClose" type="button" style="justify-self:start">הבנתי</button>
+  </section>
+
+  <button class="btn btn-ink" id="newBatch" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7V5h3M17 5h3v2M20 17v2h-3M7 19H4v-2"/><path d="M8 9v6M11 9v6M14 9v6M16.5 9v6"/></svg>
+    משלוח חדש
+  </button>
+
+  <section style="display:grid;gap:10px" id="openSec">
+    <h2>משלוחים פתוחים</h2>
+    <ul class="list" id="openList"></ul>
+    <p class="empty" id="openEmpty">אין משלוחים פתוחים.</p>
+  </section>
+
+  <section style="display:grid;gap:10px" id="histSec" hidden>
+    <div class="section-head">
+      <h2>היסטוריה</h2>
+      <button class="link-btn" id="exportAll" type="button">ייצוא לאקסל</button>
+    </div>
+    <ul class="list" id="histList"></ul>
+    <p class="empty">תמונות של משלוחים שהושלמו נמחקות אחרי 30 יום. המספרים נשארים.</p>
+  </section>
+
+  <footer class="foot">
+    <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
+    <details class="diag">
+      <summary>פרטי אבחון (גרסה 6)</summary>
+      <p id="diag" dir="auto"></p>
+    </details>
+  </footer>
+</section>
+
+<!-- ============ SHIPMENT ============ -->
+<section class="view" id="vBatch" hidden>
+  <button class="back" type="button" data-back="">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+    משלוחים
+  </button>
+  <div style="display:grid;gap:6px" class="web-only">
+    <label class="field-label" for="batchName">נמען</label>
+    <input class="name-input" id="batchName" type="text" autocomplete="off" placeholder="למשל: בר הפצה">
+  </div>
+  <div style="display:grid;gap:6px" class="app-only">
+    <p class="field-label">נמען בוואטסאפ</p>
+    <div class="recip">
+      <div class="who"><b id="recipName">לא נבחר</b><span id="recipPhone"></span></div>
+      <button class="btn btn-ghost btn-small" id="recipChange" type="button" style="width:auto">בחר</button>
+    </div>
+  </div>
+  <div class="summary" id="batchSummary"></div>
+  <div class="row">
+    <button class="btn btn-ink btn-small" id="scanMore" type="button">סרוק פריטים</button>
+    <button class="btn btn-ghost btn-small" id="photoItem" type="button"><span class="web-only">צלם פריט</span><span class="app-only">מתמונה</span></button>
+  </div>
+  <ul class="grid" id="itemGrid"></ul>
+  <p class="empty" id="gridEmpty">עוד לא נסרקו פריטים.</p>
+  <div class="links">
+    <button class="link-btn" id="exportBatch" type="button">ייצוא לאקסל</button>
+    <button class="link-btn danger" id="deleteBatch" type="button">מחק משלוח</button>
+  </div>
+  <div class="sticky" id="sendBar">
+    <button class="btn btn-send" id="goSend" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 10 14"/><path d="M21 3l-7 18-4-7-7-4 18-7z"/></svg>
+      <span id="goSendLabel">שלח בוואטסאפ</span>
+    </button>
+  </div>
+</section>
+
+<!-- ============ SCANNER ============ -->
+<section class="view scan" id="vScan" hidden>
+  <button class="back" type="button" id="scanBack">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+    לרשימה
+  </button>
+  <div class="cam-box" id="camBox">
+    <video id="cam" playsinline muted aria-label="תצוגת המצלמה"></video>
+    <div class="aim" aria-hidden="true"></div>
+  </div>
+  <div class="scan-stats">
+    <p class="counter" aria-live="polite"><span id="scanCount">0</span><small>נסרקו</small></p>
+    <p class="last" id="scanLast"></p>
+  </div>
+  <p class="scan-msg" id="scanMsg" role="status" aria-live="polite">כוון את הברקוד הנכון למרכז המסגרת.</p>
+  <button class="btn btn-ink" id="scanDone" type="button">סיום</button>
+  <div class="row">
+    <button class="btn btn-ghost btn-small" id="manual" type="button">הקלד מספר</button>
+    <button class="btn btn-ghost btn-small" id="torch" type="button" aria-pressed="false" hidden>פנס</button>
+  </div>
+</section>
+
+<!-- ============ SEND ============ -->
+<section class="view" id="vSend" hidden>
+  <button class="back" type="button" id="sendBack">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+    לרשימה
+  </button>
+  <div style="display:grid;gap:6px">
+    <p class="progress-text"><span id="sendTo"></span><span id="sendProg" class="mono"></span></p>
+    <div class="progress" aria-hidden="true"><div id="sendBar2"></div></div>
+  </div>
+  <div id="sendItem" style="display:grid;gap:12px">
+    <img class="send-photo" id="sendPhoto" alt="התמונה שתישלח">
+    <p class="send-code" id="sendCode"></p>
+    <div class="auto-next" id="autoNext" hidden>
+      <p id="autoNextText" style="font-weight:600"></p>
+      <button class="btn btn-ink btn-small" id="autoStop" type="button">עצור</button>
+    </div>
+    <button class="btn btn-send" id="sendNext" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 10 14"/><path d="M21 3l-7 18-4-7-7-4 18-7z"/></svg>
+      <span id="sendNextLabel">שלח</span>
+    </button>
+    <button class="link-btn" id="sendSkip" type="button" style="justify-self:center">דלג לפריט הבא</button>
+    <p class="lede web-only" style="font-size:.9375rem" id="sendTip">בתמונה הראשונה בוחרים את הצ'אט בוואטסאפ. מהשנייה והלאה הוא מופיע בדרך כלל ראשון במסך השיתוף.</p>
+    <p class="lede app-only" style="font-size:.9375rem">בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.</p>
+    <p class="via app-only" id="via"></p>
+  </div>
+  <div id="sendDone" class="card" hidden>
+    <h2 style="color:var(--ink)" id="sendDoneTitle">כל הפריטים הועברו</h2>
+    <p class="lede">המשלוח עבר להיסטוריה.</p>
+    <button class="btn btn-ink" type="button" data-back="">חזרה למשלוחים</button>
+  </div>
+  <p class="status" id="sendStatus" role="status" aria-live="polite"></p>
+</section>
+
+<!-- ============ DIALOGS ============ -->
+<dialog id="dEdit" aria-labelledby="dEditTitle">
+  <div class="dlg">
+    <h2 id="dEditTitle" style="color:var(--ink)"></h2>
+    <img id="dEditImg" alt="">
+    <label class="field-label" for="dEditCode">מספר (זה הכיתוב שיישלח)</label>
+    <input class="code-input" id="dEditCode" type="text" dir="ltr" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    <p class="field-label" id="dEditInfo"></p>
+    <div class="row">
+      <button class="btn btn-ink btn-small" id="dEditSave" type="button">שמור</button>
+      <button class="btn btn-ghost btn-small" id="dEditClose" type="button">סגור</button>
+    </div>
+    <div class="links">
+      <button class="link-btn" id="dEditUnsend" type="button" hidden>סמן כלא הועבר</button>
+      <button class="link-btn danger" id="dEditDelete" type="button">מחק פריט</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dManual" aria-labelledby="dManualTitle">
+  <div class="dlg">
+    <h2 id="dManualTitle" style="color:var(--ink)">הקלדת מספר</h2>
+    <img id="dManualImg" alt="התמונה שתישלח">
+    <label class="field-label" for="dManualCode">המספר שמתחת לברקוד</label>
+    <input class="code-input" id="dManualCode" type="text" dir="ltr" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    <div class="row">
+      <button class="btn btn-ink btn-small" id="dManualSave" type="button">הוסף</button>
+      <button class="btn btn-ghost btn-small" id="dManualCancel" type="button">ביטול</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dRecip" aria-labelledby="dRecipTitle">
+  <div class="dlg">
+    <h2 id="dRecipTitle" style="color:var(--ink)">למי שולחים?</h2>
+    <ul class="recip-list" id="recipList"></ul>
+    <button class="btn btn-ink btn-small" id="recipContacts" type="button">בחר מאנשי הקשר</button>
+    <details>
+      <summary class="field-label" style="cursor:pointer;min-height:36px;display:flex;align-items:center">או הקלד מספר</summary>
+      <div style="display:grid;gap:8px;margin-top:8px">
+        <input class="text-input" id="recipNewName" type="text" placeholder="שם, למשל: בר הפצה" autocomplete="off">
+        <input class="text-input" id="recipNewPhone" type="tel" dir="ltr" placeholder="050-1234567" autocomplete="off">
+        <button class="btn btn-ghost btn-small" id="recipAdd" type="button">הוסף</button>
+      </div>
+    </details>
+    <button class="link-btn" id="recipCancel" type="button" style="justify-self:start">ביטול</button>
+  </div>
+</dialog>
+
+<dialog id="dConfirm" aria-labelledby="dConfirmText">
+  <div class="dlg">
+    <p id="dConfirmText" style="font-weight:600"></p>
+    <div class="row">
+      <button class="btn btn-ink btn-small danger" id="dConfirmYes" type="button"></button>
+      <button class="btn btn-ghost btn-small" id="dConfirmNo" type="button">ביטול</button>
+    </div>
+  </div>
+</dialog>
+
+<input class="vh" type="file" id="camInput" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+<a class="vh" id="dl" tabindex="-1" aria-hidden="true"></a>
+
+<script>
+(function () {
+  'use strict';
+
+  /*<pure>*/
+  var NATIVE_NAMES = {
+    ean_13: 'EAN-13', ean_8: 'EAN-8', upc_a: 'UPC-A', upc_e: 'UPC-E',
+    code_128: 'Code 128', code_39: 'Code 39', code_93: 'Code 93', itf: 'ITF', codabar: 'Codabar',
+    qr_code: 'QR', data_matrix: 'Data Matrix', pdf417: 'PDF417', aztec: 'Aztec'
+  };
+  var WASM_NAMES = {
+    EAN13: 'EAN-13', EAN8: 'EAN-8', UPCA: 'UPC-A', UPCE: 'UPC-E', ISBN: 'ISBN',
+    Code128: 'Code 128', Code39: 'Code 39', Code39Std: 'Code 39', Code39Ext: 'Code 39', Code93: 'Code 93',
+    ITF: 'ITF', ITF14: 'ITF-14', Codabar: 'Codabar', DataBar: 'DataBar', DataBarOmni: 'DataBar',
+    DataBarExp: 'DataBar', DataBarLtd: 'DataBar',
+    QRCode: 'QR', QRCodeModel2: 'QR', MicroQRCode: 'Micro QR', DataMatrix: 'Data Matrix', PDF417: 'PDF417',
+    Aztec: 'Aztec', AztecCode: 'Aztec'
+  };
+  var WASM_FORMATS = ['EAN13', 'EAN8', 'UPCA', 'UPCE', 'Code128', 'Code39', 'Code93', 'ITF', 'Codabar', 'DataBar',
+    'QRCode', 'DataMatrix', 'PDF417', 'Aztec'];
+  var MATRIX = { 'QR': 1, 'Micro QR': 1, 'Data Matrix': 1, 'PDF417': 1, 'Aztec': 1 };
+
+  // Backup-engine results: valid only, no duplicates, with the code's centre.
+  // A 1D read seen on few scan lines is marked weak, because blur can produce a wrong number.
+  function cleanWasm(results) {
+    var seen = {}, out = [];
+    (results || []).forEach(function (r) {
+      if (!r || !r.isValid || !r.text || seen[r.text]) return;
+      seen[r.text] = 1;
+      var name = WASM_NAMES[r.format] || String(r.format || '');
+      var p = r.position, cx = null, cy = null;
+      if (p && p.topLeft && p.bottomRight) {
+        cx = (p.topLeft.x + p.topRight.x + p.bottomLeft.x + p.bottomRight.x) / 4;
+        cy = (p.topLeft.y + p.topRight.y + p.bottomLeft.y + p.bottomRight.y) / 4;
+      }
+      out.push({ value: r.text, format: name, strong: !!MATRIX[name] || (r.lineCount || 0) >= 6, cx: cx, cy: cy });
+    });
+    return out;
+  }
+
+  // Of several codes in the frame, the one whose centre is nearest the middle. Codes without a position come last.
+  function pickCentered(list, w, h) {
+    var best = null, bestD = Infinity;
+    list.forEach(function (c) {
+      var d = c.cx == null ? 1e12 : Math.pow(c.cx - w / 2, 2) + Math.pow(c.cy - h / 2, 2);
+      if (d < bestD) { bestD = d; best = c; }
+    });
+    return best;
+  }
+
+  // The part of the video picture that is inside the on-screen aiming box, for a video shown with object-fit: cover.
+  function aimRect(vw, vh, boxW, boxH, fx, fy) {
+    var s = Math.max(boxW / vw, boxH / vh);
+    var w = Math.min(vw, (boxW * fx) / s), h = Math.min(vh, (boxH * fy) / s);
+    return { x: (vw - w) / 2, y: (vh - h) / 2, w: w, h: h };
+  }
+
+  // The parts of a still photo worth reading, most likely first: [label, x, y, w, h, longest side, turn45].
+  function planPasses(W, H, maxSide) {
+    var big = Math.max(W, H) > maxSide * 1.25, P = [['מלאה', 0, 0, W, H, maxSide, false]];
+    if (big) {
+      var cw = Math.min(W, maxSide), ch = Math.min(H, maxSide);
+      P.push(['מרכז', Math.round((W - cw) / 2), Math.round((H - ch) / 2), cw, ch, maxSide, false]);
+      P.push(['מלאה חדה', 0, 0, W, H, 3200, false]);
+    }
+    P.push(['באלכסון', 0, 0, W, H, maxSide, true]);
+    return P;
+  }
+
+  function cleanCode(s) { return String(s || '').replace(/[\u0000-\u001f\u007f]/g, '').trim(); }
+
+  function safeName(text) {
+    var s = String(text || '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    return (s || 'barcode') + '.jpg';
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtTime(t) { var d = new Date(t); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  function fmtDate(t) { var d = new Date(t); return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.' + d.getFullYear(); }
+  function fmtWhen(t, now) {
+    var d = new Date(t), n = new Date(now);
+    if (d.toDateString() === n.toDateString()) return 'היום ' + fmtTime(t);
+    var y = new Date(now - 864e5);
+    if (d.toDateString() === y.toDateString()) return 'אתמול ' + fmtTime(t);
+    return fmtDate(t) + ' ' + fmtTime(t);
+  }
+
+  // Excel-friendly CSV: BOM for Hebrew, codes kept as text so long numbers are not turned into 1.2E+12.
+  function toCsv(batches) {
+    var q = function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+    var asText = function (v) { return '"=""' + String(v).replace(/"/g, '""""') + '"""'; };
+    var rows = [['משלוח', 'נמען', 'פריט', 'ברקוד', 'סוג', 'נסרק', 'הועבר'].map(q).join(',')];
+    batches.forEach(function (b) {
+      b.items.forEach(function (it, i) {
+        rows.push([
+          q(fmtDate(b.created)), q(b.name || ''), q(i + 1), asText(it.code), q(it.format || ''),
+          q(fmtDate(it.at) + ' ' + fmtTime(it.at)), q(it.sentAt ? fmtDate(it.sentAt) + ' ' + fmtTime(it.sentAt) : '')
+        ].join(','));
+      });
+    });
+    return '﻿' + rows.join('\r\n') + '\r\n';
+  }
+
+  // Phone number to WhatsApp form: digits only, international. Israeli local numbers get 972.
+  function normalizePhone(raw) {
+    var d = String(raw || '').replace(/[^0-9]/g, '');
+    if (d.indexOf('00') === 0) d = d.slice(2);
+    else if (d.charAt(0) === '0') d = '972' + d.slice(1);
+    return d.length >= 9 && d.length <= 15 ? d : null;
+  }
+  function fmtPhone(d) {
+    if (!d) return '';
+    if (d.indexOf('972') === 0 && d.length === 12) return '0' + d.slice(3, 5) + '-' + d.slice(5, 8) + '-' + d.slice(8);
+    return '+' + d;
+  }
+
+  function nextUnsent(items, from) {
+    for (var k = 0; k < items.length; k++) {
+      var i = (from + k) % items.length;
+      if (!items[i].sentAt) return i;
+    }
+    return -1;
+  }
+  /*</pure>*/
+
+  var VERSION = 6;
+  var WASM_LOCAL = 'zxing-reader.js';
+  var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
+  var MAX_SIDE = 1920;
+  var AIM_FX = 0.86, AIM_FY = 0.34;          // must match .aim in the stylesheet
+  var KEEP_PHOTOS_DAYS = 30;
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  // Inside the Android app the page gets a bridge object; on the web it is absent.
+  var NATIVE = window.BarcodeWA || null, nativeInfo = { apps: [] };
+  if (NATIVE) {
+    try { nativeInfo = JSON.parse(NATIVE.info()); } catch (e) {}
+    document.documentElement.classList.add('native');
+  }
+  var WA_NAMES = { 'com.whatsapp': 'WhatsApp', 'com.whatsapp.w4b': 'WhatsApp Business' };
+  function waPkg() {
+    var apps = nativeInfo.apps || [], pref = null;
+    try { pref = localStorage.getItem('bcwa.wa'); } catch (e) {}
+    return apps.indexOf(pref) >= 0 ? pref : apps[0] || null;
+  }
+
+  function $(id) { return document.getElementById(id); }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function breathe() { return new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 0); }); }); }
+  function noop() {}
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+  var diag = { native: 'נבדק', wasm: 'לא נטען', store: 'נבדק', last: 'עדיין לא בוצעה סריקה' };
+  function paintDiag() {
+    $('diag').textContent = (NATIVE ? 'אפליקציה ' + (nativeInfo.version || '?') + ' · ' : '') + 'מנוע מובנה: ' + diag.native + ' · מנוע גיבוי: ' + diag.wasm + ' · שמירה: ' + diag.store +
+      ' · ' + diag.last + ' · ' + navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 110);
+  }
+
+  /* =========================================================
+     Storage: IndexedDB, with an in-memory stand-in when it is not available
+     ========================================================= */
+  var store = (function () {
+    var mem = { batches: {}, photos: {} }, dbp = null, usingMem = false;
+    function open() {
+      return new Promise(function (res, rej) {
+        var r = indexedDB.open('bcwa', 1);
+        r.onupgradeneeded = function () {
+          var d = r.result;
+          if (!d.objectStoreNames.contains('batches')) d.createObjectStore('batches', { keyPath: 'id' });
+          if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos');
+        };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { rej(r.error); };
+        r.onblocked = function () { rej(new Error('blocked')); };
+      });
+    }
+    function tx(name, mode, fn) {
+      return dbp.then(function (d) {
+        return new Promise(function (res, rej) {
+          var t = d.transaction(name, mode), out, r = fn(t.objectStore(name));
+          if (r) r.onsuccess = function () { out = r.result; };
+          t.oncomplete = function () { res(out); };
+          t.onerror = t.onabort = function () { rej(t.error); };
+        });
+      });
+    }
+    var ready = (async function () {
+      try {
+        if (!window.indexedDB) throw new Error('none');
+        dbp = open();
+        await dbp;
+        diag.store = 'בטלפון';
+      } catch (e) { usingMem = true; diag.store = 'זמנית בלבד'; }
+    })();
+    return {
+      ready: ready,
+      get temporary() { return usingMem; },
+      allBatches: function () {
+        return ready.then(function () { return usingMem ? Object.values(mem.batches) : tx('batches', 'readonly', function (s) { return s.getAll(); }); });
+      },
+      putBatch: function (b) {
+        var copy = JSON.parse(JSON.stringify(b));
+        return ready.then(function () { if (usingMem) { mem.batches[b.id] = copy; return; } return tx('batches', 'readwrite', function (s) { return s.put(copy); }); });
+      },
+      delBatch: function (id) {
+        return ready.then(function () { if (usingMem) { delete mem.batches[id]; return; } return tx('batches', 'readwrite', function (s) { return s.delete(id); }); });
+      },
+      putPhoto: function (id, rec) {
+        return ready.then(function () { if (usingMem) { mem.photos[id] = rec; return; } return tx('photos', 'readwrite', function (s) { return s.put(rec, id); }); });
+      },
+      getPhoto: function (id) {
+        return ready.then(function () { return usingMem ? mem.photos[id] : tx('photos', 'readonly', function (s) { return s.get(id); }); });
+      },
+      delPhotos: function (ids) {
+        return ready.then(function () {
+          if (usingMem) { ids.forEach(function (i) { delete mem.photos[i]; }); return; }
+          return tx('photos', 'readwrite', function (s) { ids.forEach(function (i) { s.delete(i); }); });
+        });
+      }
+    };
+  })();
+
+  var batches = [];                 // all shipments, in memory
+  function batchById(id) { for (var i = 0; i < batches.length; i++) if (batches[i].id === id) return batches[i]; return null; }
+  function save(b) { b.updated = Date.now(); return store.putBatch(b).catch(function () { showSendStatus('השמירה נכשלה. ייתכן שהזיכרון בטלפון מלא.', 'warn'); }); }
+
+  // Thumbnails: object URLs, made once per item.
+  var thumbUrls = {};
+  async function thumbUrl(itemId) {
+    if (thumbUrls[itemId]) return thumbUrls[itemId];
+    var rec = await store.getPhoto(itemId);
+    if (!rec || !rec.thumb) return '';
+    return (thumbUrls[itemId] = URL.createObjectURL(rec.thumb));
+  }
+  function dropThumb(itemId) { if (thumbUrls[itemId]) { URL.revokeObjectURL(thumbUrls[itemId]); delete thumbUrls[itemId]; } }
+
+  /* =========================================================
+     Barcode engines
+     ========================================================= */
+  var nativeDet = null;
+  var nativeReady = (async function () {
+    if (!('BarcodeDetector' in window)) { diag.native = 'אין בדפדפן הזה'; return; }
+    try {
+      var formats = await window.BarcodeDetector.getSupportedFormats();
+      if (formats && formats.length) { nativeDet = new window.BarcodeDetector({ formats: formats }); diag.native = formats.length + ' פורמטים'; }
+      else diag.native = 'קיים אבל לא פעיל';
+    } catch (e) { diag.native = 'שגיאה (' + (e && e.name) + ')'; }
+  })();
+
+  // List of codes with their centres, or null when the engine is missing or failed.
+  async function nativeRead(source) {
+    await nativeReady;
+    if (!nativeDet) return null;
+    try {
+      var found = await nativeDet.detect(source), seen = {}, out = [];
+      found.forEach(function (f) {
+        var v = f.rawValue;
+        if (!v || seen[v]) return;
+        seen[v] = 1;
+        var b = f.boundingBox || {};
+        out.push({ value: v, format: NATIVE_NAMES[f.format] || '', strong: true,
+          cx: b.width ? b.x + b.width / 2 : null, cy: b.height ? b.y + b.height / 2 : null });
+      });
+      return out;
+    } catch (e) { diag.native = 'נכשל בקריאה (' + (e && e.name) + ')'; return null; }
+  }
+
+  function loadScript(src) {
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = src; s.async = true; s.onload = res;
+      s.onerror = function () { s.remove(); rej(new Error('script')); };
+      document.head.appendChild(s);
+    });
+  }
+  var wasmPromise = null;
+  function loadWasm() {
+    if (!wasmPromise) {
+      wasmPromise = (async function () {
+        var local = true;
+        try { await loadScript(WASM_LOCAL); } catch (e) { local = false; await loadScript(WASM_CDN + 'iife/reader/index.js'); }
+        var prepare = function (url) {
+          return window.ZXingWASM.prepareZXingModule({
+            overrides: { locateFile: function (path, prefix) { return /\.wasm$/.test(path) ? url : prefix + path; } },
+            fireImmediately: true
+          });
+        };
+        try {
+          if (!local) throw new Error('cdn');
+          await prepare(new URL('zxing_reader.wasm', document.baseURI).href);
+          diag.wasm = 'נטען';
+        } catch (e) { await prepare(WASM_CDN + 'reader/zxing_reader.wasm'); diag.wasm = 'נטען מהרשת'; }
+      })().catch(function (e) { wasmPromise = null; diag.wasm = 'לא נטען'; throw e; });
+    }
+    return wasmPromise;
+  }
+  async function wasmRead(imageData, deep) {
+    await loadWasm();
+    var bins = deep ? ['LocalAverage', 'GlobalHistogram', 'FixedThreshold'] : ['LocalAverage'];
+    for (var i = 0; i < bins.length; i++) {
+      var found = cleanWasm(await window.ZXingWASM.readBarcodes(imageData, {
+        formats: WASM_FORMATS, binarizer: bins[i], tryHarder: deep, tryRotate: true, tryInvert: deep,
+        tryDownscale: true, minLineCount: 3, maxNumberOfSymbols: 6
+      }));
+      if (found.length) return found;
+    }
+    return [];
+  }
+
+  // A rectangle of the source scaled so its longest side fits `side`; optionally turned 45 degrees.
+  function region(src, sx, sy, sw, sh, side, turn, forReading) {
+    var k = Math.min(1, side / Math.max(sw, sh));
+    var w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+    var c = document.createElement('canvas');
+    var ctx = c.getContext('2d', forReading ? { willReadFrequently: true } : undefined);
+    if (turn) {
+      var s = Math.ceil((w + h) / Math.SQRT2), f = Math.min(1, side / s);
+      c.width = c.height = Math.max(1, Math.round(s * f));
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.translate(c.width / 2, c.height / 2); ctx.rotate(Math.PI / 4);
+      ctx.drawImage(src, sx, sy, sw, sh, -w * f / 2, -h * f / 2, w * f, h * f);
+    } else {
+      c.width = w; c.height = h;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
+    }
+    return c;
+  }
+
+  // A still photo: built-in engine over each part first, then the backup engine. Picks the code nearest the centre.
+  async function scanStill(src, W, H) {
+    var passes = planPasses(W, H, 2048), started = performance.now(), tries = 0, i, c, found;
+    var done = function (list, engine, label) {
+      diag.last = 'קריאה אחרונה: ' + (list.length ? engine + ', תמונה, חלק "' + label + '"' : 'תמונה, לא נמצא') + ', ' + tries +
+        ' ניסיונות, ' + Math.round(performance.now() - started) + 'ms';
+      paintDiag();
+      if (!list.length) return null;
+      return label === 'מלאה' || label === 'מלאה חדה' ? pickCentered(list, c.width, c.height) : list[0];
+    };
+    await nativeReady;
+    if (nativeDet) {
+      for (i = 0; i < passes.length; i++) {
+        tries++; c = region(src, passes[i][1], passes[i][2], passes[i][3], passes[i][4], passes[i][5], passes[i][6], true);
+        found = await nativeRead(c);
+        if (found === null) break;
+        if (found.length) return done(found, 'מובנה', passes[i][0]);
+      }
+    }
+    var deadline = performance.now() + 9000;
+    for (i = 0; i < passes.length && performance.now() < deadline; i++) {
+      await breathe();
+      tries++; c = region(src, passes[i][1], passes[i][2], passes[i][3], passes[i][4], passes[i][5], passes[i][6], true);
+      found = await wasmRead(c.getContext('2d').getImageData(0, 0, c.width, c.height), true);
+      if (found.length) return done(found, 'גיבוי', passes[i][0]);
+    }
+    return done([], '', '');
+  }
+
+  // Full photo and thumbnail from any drawable source.
+  async function makePhoto(src, w, h) {
+    var full = region(src, 0, 0, w, h, MAX_SIDE, false, false);
+    var thumb = region(src, 0, 0, w, h, 320, false, false);
+    var toBlob = function (c, q) { return new Promise(function (r) { c.toBlob(r, 'image/jpeg', q); }); };
+    var fb = await toBlob(full, 0.88), tb = await toBlob(thumb, 0.72);
+    if (!fb || !tb) throw new Error('photo');
+    return { full: fb, thumb: tb };
+  }
+
+  /* =========================================================
+     Navigation: #, #b-<id>, #b-<id>-scan, #b-<id>-send
+     ========================================================= */
+  var navStack = [location.hash || '#'];
+  var current = { view: 'home', batch: null };
+  function go(hash) {
+    if (hash === (location.hash || '#')) { route(); return; }
+    if (navStack[navStack.length - 1] !== hash) navStack.push(hash);
+    location.hash = hash;
+  }
+  function goBack(parent) {
+    if (navStack.length > 1 && navStack[navStack.length - 2] === (parent || '#')) history.back();
+    else { history.replaceState(null, '', parent || '#'); navStack[navStack.length - 1] = parent || '#'; route(); }
+    if (navStack.length > 1 && navStack[navStack.length - 2] === (parent || '#')) navStack.pop();
+  }
+  window.addEventListener('hashchange', function () {
+    var h = location.hash || '#';
+    if (navStack[navStack.length - 1] === h) { /* our own go() */ }
+    else if (navStack.length > 1 && navStack[navStack.length - 2] === h) navStack.pop();
+    else navStack.push(h);
+    route();
+  });
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-back]');
+    if (b) goBack(b.getAttribute('data-back') || '#');
+  });
+
+  function route() {
+    var h = (location.hash || '#').slice(1), m = h.match(/^b-([a-z0-9]+)(?:-(scan|send))?$/);
+    var b = m ? batchById(m[1]) : null;
+    var view = b ? (m[2] || 'batch') : 'home';
+    if (view === 'scan' && current.view === 'scan' && current.batch === b) return;   // already scanning this shipment
+    if (current.view === 'scan' && view !== 'scan') stopScanner();
+    if (view !== 'send') { clearTimeout(autoTimer); autoTimer = 0; }
+    current = { view: view, batch: b };
+    ['vHome', 'vBatch', 'vScan', 'vSend'].forEach(function (id) { $(id).hidden = true; });
+    if (view === 'home') { cleanupEmpty(); renderHome(); $('vHome').hidden = false; }
+    else if (view === 'batch') { renderBatch(b); $('vBatch').hidden = false; }
+    else if (view === 'scan') { $('vScan').hidden = false; startScanner(b); }
+    else if (view === 'send') { $('vSend').hidden = false; startSend(b); }
+    window.scrollTo(0, 0);
+  }
+
+  /* =========================================================
+     Home
+     ========================================================= */
+  function sentCount(b) { var n = 0; b.items.forEach(function (i) { if (i.sentAt) n++; }); return n; }
+  function displayName(b) { return b.name || ('משלוח ' + fmtWhen(b.created, Date.now())); }
+
+  function shipmentButton(b) {
+    var li = el('li'), btn = el('button', 'shipment');
+    btn.type = 'button';
+    var sent = sentCount(b), n = b.items.length;
+    btn.appendChild(el('span', 'name', displayName(b)));
+    var meta = el('span', 'meta');
+    meta.textContent = fmtWhen(b.created, Date.now()) + ' · ';
+    var pill = el('span', 'pill' + (b.doneAt ? '' : ' wait'), b.doneAt ? 'הועבר' : sent ? sent + ' מתוך ' + n + ' הועברו' : 'לא נשלח');
+    meta.appendChild(pill);
+    btn.appendChild(meta);
+    btn.appendChild(el('span', 'count', String(n)));
+    btn.setAttribute('aria-label', displayName(b) + ', ' + n + ' פריטים');
+    btn.addEventListener('click', function () { go('#b-' + b.id); });
+    li.appendChild(btn);
+    return li;
+  }
+
+  function renderHome() {
+    var open = batches.filter(function (b) { return !b.doneAt && b.items.length; }).sort(function (a, b) { return b.created - a.created; });
+    var done = batches.filter(function (b) { return b.doneAt; }).sort(function (a, b) { return b.doneAt - a.doneAt; });
+    var ol = $('openList'), hl = $('histList');
+    ol.textContent = ''; hl.textContent = '';
+    open.forEach(function (b) { ol.appendChild(shipmentButton(b)); });
+    done.slice(0, 50).forEach(function (b) { hl.appendChild(shipmentButton(b)); });
+    $('openEmpty').hidden = open.length > 0;
+    $('histSec').hidden = done.length === 0;
+    $('noStore').hidden = !store.temporary;
+    var seen = false; try { seen = localStorage.getItem('bcwa.onboarded') === '1'; } catch (e) {}
+    $('onboard').hidden = seen || batches.some(function (b) { return b.doneAt; });
+    paintDiag();
+  }
+
+  async function cleanupEmpty() {
+    var empty = batches.filter(function (b) { return !b.items.length && (!current.batch || current.batch.id !== b.id); });
+    for (var i = 0; i < empty.length; i++) {
+      batches.splice(batches.indexOf(empty[i]), 1);
+      await store.delBatch(empty[i].id);
+    }
+  }
+
+  // Photos of shipments finished long ago are removed; the numbers stay.
+  async function purgeOld() {
+    var limit = Date.now() - KEEP_PHOTOS_DAYS * 864e5;
+    for (var i = 0; i < batches.length; i++) {
+      var b = batches[i];
+      if (b.doneAt && b.doneAt < limit && !b.photosPurged) {
+        await store.delPhotos(b.items.map(function (it) { return it.id; }));
+        b.photosPurged = true;
+        await save(b);
+      }
+    }
+  }
+
+  $('newBatch').addEventListener('click', async function () {
+    unlockAudio();
+    var b = { id: uid(), name: '', created: Date.now(), updated: Date.now(), items: [], doneAt: null, photosPurged: false };
+    batches.push(b);
+    await save(b);
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(noop);
+    go('#b-' + b.id);
+    go('#b-' + b.id + '-scan');
+  });
+  $('onboardClose').addEventListener('click', function () {
+    try { localStorage.setItem('bcwa.onboarded', '1'); } catch (e) {}
+    $('onboard').hidden = true;
+  });
+  $('exportAll').addEventListener('click', function () {
+    var done = batches.filter(function (b) { return b.doneAt; }).sort(function (a, b) { return a.created - b.created; });
+    download(toCsv(done), 'barcodes-history-' + fmtDate(Date.now()).replace(/\./g, '-') + '.csv');
+  });
+
+  function download(text, name) {
+    if (NATIVE) { try { NATIVE.share(name, 'text/csv', text); } catch (e) {} return; }
+    var url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+    var a = $('dl'); a.href = url; a.download = name; a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  /* =========================================================
+     Shipment view
+     ========================================================= */
+  var nameTimer = 0;
+  function renderBatch(b) {
+    var input = $('batchName');
+    if (document.activeElement !== input) input.value = b.name || '';
+    $('recipName').textContent = b.phone ? (b.name || fmtPhone(b.phone)) : 'לא נבחר';
+    $('recipPhone').textContent = b.phone ? fmtPhone(b.phone) : 'בוחרים פעם אחת לכל משלוח';
+    $('recipChange').textContent = b.phone ? 'החלף' : 'בחר';
+    var n = b.items.length, sent = sentCount(b);
+    var sum = $('batchSummary'); sum.textContent = '';
+    sum.appendChild(el('span', '', n + ' פריטים'));
+    if (n) sum.appendChild(el('span', '', sent + ' הועברו'));
+    sum.appendChild(el('span', '', fmtWhen(b.created, Date.now())));
+    var grid = $('itemGrid'); grid.textContent = '';
+    b.items.forEach(function (it, i) {
+      var li = el('li'), t = el('button', 'tile');
+      t.type = 'button';
+      t.setAttribute('aria-label', 'פריט ' + (i + 1) + ', ' + it.code + (it.sentAt ? ', הועבר' : ''));
+      var img = el('img'); img.alt = ''; img.loading = 'lazy';
+      if (!b.photosPurged) thumbUrl(it.id).then(function (u) { if (u) img.src = u; });
+      t.appendChild(img);
+      t.appendChild(el('span', 'num', String(i + 1)));
+      if (it.sentAt) { var d = el('span', 'done'); d.innerHTML = CHECK; t.appendChild(d); }
+      t.appendChild(el('span', 'code', it.code));
+      t.addEventListener('click', function () { openEdit(b, it); });
+      li.appendChild(t); grid.appendChild(li);
+    });
+    $('gridEmpty').hidden = n > 0;
+    $('sendBar').hidden = n === 0 || b.photosPurged;
+    var left = n - sent;
+    $('goSendLabel').textContent = left === 0 ? 'כל הפריטים הועברו' : left === n ? 'שלח בוואטסאפ (' + n + ')' : 'המשך שליחה (נשארו ' + left + ')';
+    $('goSend').disabled = left === 0;
+    $('scanMore').disabled = $('photoItem').disabled = !!b.photosPurged;
+  }
+  $('batchName').addEventListener('input', function () {
+    var b = current.batch; if (!b) return;
+    b.name = this.value.trim();
+    clearTimeout(nameTimer);
+    nameTimer = setTimeout(function () { save(b); }, 300);
+  });
+  $('scanMore').addEventListener('click', function () { unlockAudio(); go('#b-' + current.batch.id + '-scan'); });
+  $('goSend').addEventListener('click', function () { go('#b-' + current.batch.id + '-send'); });
+  $('exportBatch').addEventListener('click', function () {
+    var b = current.batch;
+    download(toCsv([b]), 'barcodes-' + (safeName(b.name || fmtDate(b.created)).replace(/\.jpg$/, '')) + '.csv');
+  });
+  $('deleteBatch').addEventListener('click', async function () {
+    var b = current.batch;
+    var ok = await confirmBox('למחוק את המשלוח "' + displayName(b) + '" עם ' + b.items.length + ' הפריטים שלו? אי אפשר לבטל.', 'מחק');
+    if (!ok) return;
+    await store.delPhotos(b.items.map(function (it) { return it.id; }));
+    b.items.forEach(function (it) { dropThumb(it.id); });
+    batches.splice(batches.indexOf(b), 1);
+    await store.delBatch(b.id);
+    goBack('#');
+  });
+
+  // Adding one item to a shipment.
+  async function addItem(b, code, format, photo) {
+    var it = { id: uid(), code: code, format: format || '', at: Date.now(), sentAt: null };
+    await store.putPhoto(it.id, photo);
+    b.items.push(it);
+    if (b.doneAt) b.doneAt = null;
+    await save(b);
+    return it;
+  }
+  function findCode(code) {
+    var res = { here: -1, other: null };
+    batches.forEach(function (b) {
+      b.items.forEach(function (it, i) {
+        if (it.code !== code) return;
+        if (current.batch && b.id === current.batch.id) res.here = i;
+        else if (!res.other) res.other = b;
+      });
+    });
+    return res;
+  }
+
+  /* ---------- edit dialog ---------- */
+  var editing = null;
+  async function openEdit(b, it) {
+    editing = { b: b, it: it };
+    var i = b.items.indexOf(it);
+    $('dEditTitle').textContent = 'פריט ' + (i + 1);
+    $('dEditCode').value = it.code;
+    $('dEditInfo').textContent = (it.format ? it.format + ' · ' : '') + 'נסרק ' + fmtWhen(it.at, Date.now()) +
+      (it.sentAt ? ' · הועבר ' + fmtWhen(it.sentAt, Date.now()) : '');
+    $('dEditUnsend').hidden = !it.sentAt;
+    var img = $('dEditImg'); img.removeAttribute('src'); img.hidden = !!b.photosPurged;
+    if (!b.photosPurged) {
+      var rec = await store.getPhoto(it.id);
+      if (rec && rec.full) { img.src = URL.createObjectURL(rec.full); img.onload = function () { URL.revokeObjectURL(img.src); }; }
+    }
+    $('dEdit').showModal();
+  }
+  $('dEditClose').addEventListener('click', function () { $('dEdit').close(); });
+  $('dEditSave').addEventListener('click', async function () {
+    var v = cleanCode($('dEditCode').value);
+    if (!v) { $('dEditCode').focus(); return; }
+    if (v !== editing.it.code) { editing.it.code = v; editing.it.format = 'תוקן ידנית'; await save(editing.b); }
+    $('dEdit').close(); renderBatch(editing.b);
+  });
+  $('dEditUnsend').addEventListener('click', async function () {
+    editing.it.sentAt = null; editing.b.doneAt = null; await save(editing.b);
+    $('dEdit').close(); renderBatch(editing.b);
+  });
+  $('dEditDelete').addEventListener('click', async function () {
+    var b = editing.b, it = editing.it;
+    $('dEdit').close();
+    var ok = await confirmBox('למחוק את פריט ' + (b.items.indexOf(it) + 1) + ' (' + it.code + ')?', 'מחק');
+    if (!ok) return;
+    b.items.splice(b.items.indexOf(it), 1);
+    if (b.items.length && b.items.every(function (x) { return x.sentAt; })) b.doneAt = b.doneAt || Date.now();
+    await store.delPhotos([it.id]); dropThumb(it.id);
+    await save(b); renderBatch(b);
+  });
+
+  function confirmBox(text, yes) {
+    return new Promise(function (res) {
+      var d = $('dConfirm');
+      $('dConfirmText').textContent = text;
+      $('dConfirmYes').textContent = yes;
+      var done = function (v) { d.close(); $('dConfirmYes').onclick = $('dConfirmNo').onclick = null; d.onclose = null; res(v); };
+      $('dConfirmYes').onclick = function () { done(true); };
+      $('dConfirmNo').onclick = function () { done(false); };
+      d.onclose = function () { res(false); };
+      d.showModal();
+    });
+  }
+
+  /* ---------- manual entry (from the scanner, or a photo with no readable code) ---------- */
+  var manualPhoto = null, manualFromScan = false;
+  function openManual(photo, fromScan) {
+    manualPhoto = photo; manualFromScan = fromScan;
+    $('dManualCode').value = '';
+    var img = $('dManualImg');
+    img.src = URL.createObjectURL(photo.thumb);
+    img.onload = function () { URL.revokeObjectURL(img.src); };
+    $('dManual').showModal();
+    setTimeout(function () { $('dManualCode').focus(); }, 50);
+  }
+  $('dManualCancel').addEventListener('click', function () { $('dManual').close(); });
+  $('dManual').addEventListener('close', function () { manualPhoto = null; if (manualFromScan && current.view === 'scan') scanPaused = false; });
+  $('dManualSave').addEventListener('click', async function () {
+    var v = cleanCode($('dManualCode').value), b = current.batch, photo = manualPhoto;
+    if (!v) { $('dManualCode').focus(); return; }
+    if (!photo || !b) return;
+    var f = findCode(v);
+    if (f.here >= 0) { $('dManualCode').setCustomValidity('כבר ברשימה'); $('dManualCode').reportValidity(); $('dManualCode').setCustomValidity(''); return; }
+    await addItem(b, v, 'ידני', photo);
+    $('dManual').close();
+    if (current.view === 'scan') { updateScanCount(); scanMessage('נוסף ידנית: ' + v, 'ok'); $('scanLast').textContent = v; }
+    else renderBatch(b);
+  });
+
+  /* ---------- one photo with the phone's camera app ---------- */
+  $('photoItem').addEventListener('click', function () { $('camInput').click(); });
+  $('camInput').addEventListener('change', async function () {
+    var file = this.files && this.files[0]; this.value = '';
+    var b = current.batch; if (!file || !b) return;
+    var url = URL.createObjectURL(file), img = new Image();
+    try { await new Promise(function (r, j) { img.onload = r; img.onerror = j; img.src = url; }); }
+    catch (e) { URL.revokeObjectURL(url); return; }
+    $('photoItem').disabled = true; $('photoItem').textContent = 'מזהה…';
+    try {
+      var photo = await makePhoto(img, img.naturalWidth, img.naturalHeight);
+      var hit = null;
+      try { hit = await scanStill(img, img.naturalWidth, img.naturalHeight); } catch (e) { hit = null; }
+      if (hit && findCode(hit.value).here < 0) { await addItem(b, hit.value, hit.format, photo); renderBatch(b); }
+      else openManual(photo, false);
+    } finally {
+      URL.revokeObjectURL(url);
+      $('photoItem').disabled = false; $('photoItem').textContent = 'צלם פריט';
+    }
+  });
+
+  /* =========================================================
+     Scanner: continuous, picks the code nearest the centre of the aiming box
+     ========================================================= */
+  var cam = $('cam'), stream = null, track = null, torchOn = false, scanJob = 0, scanPaused = false, wakeLock = null;
+  var audio = null;
+  function unlockAudio() {
+    try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume(); } catch (e) {}
+  }
+  function beep(freq, ms) {
+    if (!audio) return;
+    try {
+      var o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+      o.frequency.value = freq; o.type = 'square';
+      g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
+      o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t + ms / 1000);
+    } catch (e) {}
+  }
+  function buzz(p) { if (navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
+  function scanMessage(t, kind) { var m = $('scanMsg'); m.textContent = t; if (kind) m.dataset.kind = kind; else delete m.dataset.kind; }
+  function flash(kind) { var bx = $('camBox'); bx.dataset.flash = kind; setTimeout(function () { if (bx.dataset.flash === kind) delete bx.dataset.flash; }, 450); }
+  function updateScanCount() { $('scanCount').textContent = current.batch ? current.batch.items.length : 0; }
+
+  function stopScanner() {
+    scanJob++;
+    if (stream) stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+    stream = track = null; torchOn = false;
+    try { cam.pause(); cam.srcObject = null; } catch (e) {}
+    if (wakeLock) { wakeLock.release().catch(noop); wakeLock = null; }
+    if (NATIVE) { try { NATIVE.keepScreenOn(false); } catch (e) {} }
+  }
+
+  async function startScanner(b) {
+    stopScanner();
+    var job = scanJob;
+    updateScanCount();
+    $('scanLast').textContent = b.items.length ? b.items[b.items.length - 1].code : '';
+    scanMessage('פותח את המצלמה…');
+    $('torch').hidden = true;
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+      scanMessage('הדפדפן הזה לא מאפשר סריקה חיה. חזור לרשימה והשתמש ב"צלם פריט".', 'warn');
+      return;
+    }
+    var got;
+    try {
+      got = await navigator.mediaDevices.getUserMedia({
+        audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+    } catch (e) {
+      if (job !== scanJob) return;
+      var denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+      scanMessage(denied ? 'אין הרשאה למצלמה. אשר אותה בהגדרות האתר בכרום (סמל המנעול ליד הכתובת), או חזור לרשימה והשתמש ב"צלם פריט".'
+        : 'המצלמה לא נפתחה. חזור לרשימה והשתמש ב"צלם פריט".', 'warn');
+      return;
+    }
+    if (job !== scanJob) { got.getTracks().forEach(function (t) { t.stop(); }); return; }   // a newer start took over
+    stream = got;
+    track = stream.getVideoTracks()[0];
+    cam.srcObject = stream;
+    try { await cam.play(); } catch (e) {}
+    if (job !== scanJob) return;
+    var caps = {};
+    try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch (e) {}
+    if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(noop);
+    $('torch').hidden = !caps.torch;
+    $('torch').textContent = 'פנס'; $('torch').setAttribute('aria-pressed', 'false');
+    try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+    if (NATIVE) { try { NATIVE.keepScreenOn(true); } catch (e) {} }
+    scanMessage('כוון את הברקוד הנכון למרכז המסגרת.');
+    await nativeReady;
+    if (!nativeDet) loadWasm().catch(noop);
+    scanPaused = false;
+    scanLoop(job, b);
+  }
+
+  async function scanLoop(job, b) {
+    var crop = document.createElement('canvas'), cctx = crop.getContext('2d', { willReadFrequently: true });
+    var cand = null, count = 0, candAt = 0, held = null, heldAt = 0, frames = 0, started = performance.now();
+    var alive = function () { return job === scanJob && current.view === 'scan'; };
+    while (alive()) {
+      await wait(40);
+      if (!alive()) return;
+      if (scanPaused || cam.readyState < 2 || !cam.videoWidth) continue;
+      frames++;
+      var vw = cam.videoWidth, vh = cam.videoHeight, box = $('camBox');
+      var r = aimRect(vw, vh, box.clientWidth || vw, box.clientHeight || vh, AIM_FX, AIM_FY);
+      var k = Math.min(1, 1100 / r.w);
+      crop.width = Math.max(1, Math.round(r.w * k)); crop.height = Math.max(1, Math.round(r.h * k));
+      cctx.drawImage(cam, r.x, r.y, r.w, r.h, 0, 0, crop.width, crop.height);
+      var engine = 'מובנה', found = nativeDet ? await nativeRead(crop) : null;
+      if (!alive()) return;
+      if (found === null) {
+        engine = 'גיבוי';
+        try { found = (await wasmRead(cctx.getImageData(0, 0, crop.width, crop.height), false)).filter(function (f) { return f.strong; }); }
+        catch (e) { found = []; }
+        if (!alive()) return;
+      }
+      var now = performance.now();
+      if (held && now - heldAt > 1500) held = null;          // the last added code has left the frame
+      if (cand && now - candAt > 800) { cand = null; count = 0; }
+      if (!found || !found.length) continue;
+      var hit = pickCentered(found, crop.width, crop.height);
+      hit.value = cleanCode(hit.value);
+      if (!hit.value) continue;
+      if (hit.value === held) { heldAt = now; continue; }     // still looking at the code just handled
+      if (hit.value === cand) count++; else { cand = hit.value; count = 1; }
+      candAt = now;
+      if (count < 3) { scanMessage('נקרא, מאמת…'); continue; }
+      cand = null; count = 0; held = hit.value; heldAt = now;
+      diag.last = 'קריאה אחרונה: ' + engine + ', סריקה חיה, ' + frames + ' פריימים, ' + Math.round(now - started) + 'ms, וידאו ' + vw + '×' + vh;
+      await acceptCode(b, hit, vw, vh);
+    }
+  }
+
+  async function acceptCode(b, hit, vw, vh) {
+    var f = findCode(hit.value);
+    if (f.here >= 0) {
+      flash('dup'); beep(520, 140); buzz([40, 60, 40]);
+      scanMessage('כבר ברשימה (פריט ' + (f.here + 1) + '): ' + hit.value, 'warn');
+      return;
+    }
+    var photo;
+    try { photo = await makePhoto(cam, vw, vh); } catch (e) { scanMessage('התמונה לא נשמרה. נסה שוב.', 'warn'); return; }
+    await addItem(b, hit.value, hit.format, photo);
+    flash('ok'); beep(1760, 90); buzz(60);
+    updateScanCount();
+    $('scanLast').textContent = hit.value;
+    if (f.other) scanMessage('נוסף. שים לב: המספר הזה נסרק גם במשלוח "' + displayName(f.other) + '".', 'warn');
+    else scanMessage('נוסף: ' + hit.value + '. אפשר לעבור לחבילה הבאה.', 'ok');
+  }
+
+  $('scanDone').addEventListener('click', function () { goBack('#b-' + current.batch.id); });
+  $('scanBack').addEventListener('click', function () { goBack('#b-' + current.batch.id); });
+  $('torch').addEventListener('click', function () {
+    if (!track) return;
+    var next = !torchOn;
+    track.applyConstraints({ advanced: [{ torch: next }] }).then(function () {
+      torchOn = next; $('torch').textContent = next ? 'כבה פנס' : 'פנס'; $('torch').setAttribute('aria-pressed', String(next));
+    }).catch(function () { $('torch').hidden = true; });
+  });
+  $('manual').addEventListener('click', async function () {
+    if (!cam.videoWidth) { scanMessage('המצלמה עוד לא מוכנה.', 'warn'); return; }
+    scanPaused = true;
+    try { openManual(await makePhoto(cam, cam.videoWidth, cam.videoHeight), true); }
+    catch (e) { scanPaused = false; }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (current.view !== 'scan') return;
+    if (document.hidden) stopScanner(); else if (current.batch) startScanner(current.batch);
+  });
+
+  /* =========================================================
+     Send: one item at a time, the number as the caption
+     ========================================================= */
+  var sendIdx = -1, sendFile = null, sendPhotoUrl = null;
+  function showSendStatus(t, kind) { var s = $('sendStatus'); s.textContent = t || ''; if (kind) s.dataset.kind = kind; else delete s.dataset.kind; }
+
+  function startSend(b) {
+    showSendStatus('');
+    cancelAutoNext();
+    if (NATIVE) {
+      var pkg = waPkg(), apps = nativeInfo.apps || [], via = $('via');
+      via.textContent = '';
+      if (!pkg) via.textContent = 'וואטסאפ לא נמצא בטלפון.';
+      else {
+        via.appendChild(document.createTextNode('נשלח דרך ' + WA_NAMES[pkg]));
+        if (apps.length > 1) {
+          var sw = el('button', 'link-btn', 'החלף ל\u05be' + WA_NAMES[apps[apps.indexOf(pkg) === 0 ? 1 : 0]]);
+          sw.type = 'button'; sw.style.minHeight = '32px';
+          sw.addEventListener('click', function () {
+            try { localStorage.setItem('bcwa.wa', apps[apps.indexOf(pkg) === 0 ? 1 : 0]); } catch (e) {}
+            startSend(b);
+          });
+          via.appendChild(sw);
+        }
+      }
+    }
+    $('sendTo').textContent = NATIVE ? (b.phone ? 'אל: ' + (b.name || fmtPhone(b.phone)) : 'עוד לא נבחר נמען')
+      : b.name ? 'אל: ' + b.name : 'בחר בוואטסאפ את הצ\'אט של הנמען';
+    sendIdx = nextUnsent(b.items, 0);
+    showSendItem(b);
+  }
+
+  async function showSendItem(b) {
+    var n = b.items.length, sent = sentCount(b);
+    $('sendProg').textContent = sent + ' / ' + n;
+    $('sendBar2').style.width = (n ? (sent / n) * 100 : 0) + '%';
+    var done = sendIdx < 0;
+    $('sendItem').hidden = done; $('sendDone').hidden = !done;
+    if (done) {
+      if (!b.doneAt) { b.doneAt = Date.now(); await save(b); }
+      $('sendDoneTitle').textContent = 'כל ' + n + ' הפריטים הועברו';
+      return;
+    }
+    var it = b.items[sendIdx];
+    $('sendCode').textContent = it.code;
+    $('sendNextLabel').textContent = 'שלח פריט ' + (sendIdx + 1) + ' מתוך ' + n;
+    $('sendTip').hidden = sent > 0;
+    $('sendSkip').hidden = n - sent < 2;
+    $('sendNext').disabled = true; sendFile = null;
+    var rec = await store.getPhoto(it.id);
+    if (current.view !== 'send' || b.items[sendIdx] !== it) return;
+    if (!rec || !rec.full) { showSendStatus('התמונה של הפריט הזה לא נמצאה.', 'warn'); return; }
+    if (sendPhotoUrl) URL.revokeObjectURL(sendPhotoUrl);
+    sendPhotoUrl = URL.createObjectURL(rec.full);
+    $('sendPhoto').src = sendPhotoUrl;
+    sendFile = new File([rec.full], safeName(it.code), { type: 'image/jpeg', lastModified: it.at });
+    if (NATIVE) {
+      if (!b.phone) { $('sendNextLabel').textContent = 'בחר נמען כדי לשלוח'; }
+      $('sendNext').disabled = !waPkg();
+      return;
+    }
+    var can = false;
+    try { can = !!(navigator.canShare && navigator.canShare({ files: [sendFile] })); } catch (e) {}
+    if (!can) { showSendStatus('הדפדפן הזה לא יכול לשלוח תמונות לוואטסאפ. פתח את האפליקציה בכרום באנדרואיד.', 'warn'); return; }
+    $('sendNext').disabled = false;
+  }
+
+  $('sendNext').addEventListener('click', function () {
+    var b = current.batch; if (!b || !sendFile || sendIdx < 0) return;
+    if (NATIVE) {
+      if (!b.phone) { openRecip(b, function () { startSend(b); }); return; }
+      nativeSend(b, b.items[sendIdx]);
+      return;
+    }
+    var it = b.items[sendIdx], data = { files: [sendFile] };
+    // On iPhone WhatsApp drops the photo when text comes with it.
+    if (!isIOS) data.text = it.code;
+    $('sendNext').disabled = true;
+    navigator.share(data).then(async function () {
+      it.sentAt = Date.now();
+      await save(b);
+      showSendStatus('');
+      sendIdx = nextUnsent(b.items, sendIdx + 1);
+      showSendItem(b);
+    }).catch(function (err) {
+      $('sendNext').disabled = false;
+      if (err && err.name === 'AbortError') return;      // share sheet closed without choosing
+      showSendStatus('השליחה לא הצליחה. נסה שוב.', 'warn');
+    });
+  });
+  /* ---------- Android app: straight into the recipient's chat ---------- */
+  var nativePending = null, autoTimer = 0;
+  function blobToB64(blob) {
+    return new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload = function () { res(String(r.result).split(',')[1] || ''); };
+      r.onerror = function () { rej(r.error); };
+      r.readAsDataURL(blob);
+    });
+  }
+  async function nativeSend(b, it) {
+    cancelAutoNext();
+    var rec = await store.getPhoto(it.id);
+    if (!rec || !rec.full) { showSendStatus('התמונה של הפריט הזה לא נמצאה.', 'warn'); return; }
+    $('sendNext').disabled = true;
+    try {
+      var b64 = await blobToB64(rec.full);
+      nativePending = { b: b, it: it };
+      var err = NATIVE.send(waPkg(), b.phone, it.code, safeName(it.code), b64);
+      if (err) { nativePending = null; $('sendNext').disabled = false; showSendStatus(err, 'warn'); }
+    } catch (e) {
+      nativePending = null; $('sendNext').disabled = false;
+      showSendStatus('וואטסאפ לא נפתח. נסה שוב.', 'warn');
+    }
+  }
+  function cancelAutoNext() { clearTimeout(autoTimer); autoTimer = 0; $('autoNext').hidden = true; }
+  // Called by the app when the person comes back from WhatsApp. code: Activity result (-1 OK, 0 canceled).
+  async function nativeReturned(code) {
+    var p = nativePending; nativePending = null;
+    if (!p) return;
+    diag.last = 'חזרה מוואטסאפ, קוד ' + code; paintDiag();
+    var b = p.b;
+    if (code === 0) {
+      $('sendNext').disabled = false;
+      showSendStatus('נראה שהתמונה לא נשלחה. לחץ "שלח" כדי לנסות שוב.', 'warn');
+      return;
+    }
+    p.it.sentAt = Date.now();
+    await save(b);
+    showSendStatus('');
+    if (current.view !== 'send' || current.batch !== b) return;
+    sendIdx = nextUnsent(b.items, b.items.indexOf(p.it) + 1);
+    await showSendItem(b);
+    if (sendIdx < 0) return;
+    // Open the next one by itself, with a moment to stop.
+    $('autoNextText').textContent = 'פריט ' + (sendIdx + 1) + ' נפתח עוד רגע\u2026';
+    $('autoNext').hidden = false;
+    var it = b.items[sendIdx];
+    autoTimer = setTimeout(function () {
+      $('autoNext').hidden = true;
+      if (current.view === 'send' && current.batch === b && b.items[sendIdx] === it) nativeSend(b, it);
+    }, 1300);
+  }
+  $('autoStop').addEventListener('click', function () { cancelAutoNext(); showSendStatus('נעצר. לחץ "שלח" כדי להמשיך.'); });
+
+  var recipFor = null, recipDone = null;
+  function loadRecips() { try { return JSON.parse(localStorage.getItem('bcwa.recips') || '[]'); } catch (e) { return []; } }
+  function rememberRecip(r) {
+    var list = loadRecips().filter(function (x) { return x.phone !== r.phone; });
+    list.unshift(r);
+    try { localStorage.setItem('bcwa.recips', JSON.stringify(list.slice(0, 30))); } catch (e) {}
+  }
+  function openRecip(b, done) {
+    recipFor = b; recipDone = done || null;
+    var ul = $('recipList'); ul.textContent = '';
+    loadRecips().forEach(function (r) {
+      var li = el('li'), btn = el('button');
+      btn.type = 'button';
+      btn.appendChild(el('b', '', r.name || fmtPhone(r.phone)));
+      btn.appendChild(el('span', '', fmtPhone(r.phone)));
+      btn.addEventListener('click', function () { chooseRecip(r); });
+      li.appendChild(btn); ul.appendChild(li);
+    });
+    ul.hidden = !ul.children.length;
+    $('recipNewName').value = ''; $('recipNewPhone').value = '';
+    $('dRecip').showModal();
+  }
+  async function chooseRecip(r) {
+    var b = recipFor; if (!b) return;
+    b.phone = r.phone; b.name = r.name || '';
+    rememberRecip(r);
+    await save(b);
+    $('dRecip').close();
+    if (current.view === 'batch') renderBatch(b);
+    if (recipDone) { var d = recipDone; recipDone = null; d(); }
+  }
+  $('recipChange').addEventListener('click', function () { openRecip(current.batch); });
+  $('recipCancel').addEventListener('click', function () { recipDone = null; $('dRecip').close(); });
+  $('recipContacts').addEventListener('click', function () { try { NATIVE.pickContact(); } catch (e) {} });
+  $('recipAdd').addEventListener('click', function () {
+    var ph = normalizePhone($('recipNewPhone').value);
+    if (!ph) { $('recipNewPhone').setCustomValidity('מספר לא תקין'); $('recipNewPhone').reportValidity(); $('recipNewPhone').setCustomValidity(''); return; }
+    chooseRecip({ name: $('recipNewName').value.trim(), phone: ph });
+  });
+  window.__bcwaNative = {
+    contact: function (name, raw) {
+      var ph = normalizePhone(raw);
+      if (!ph) { alertLike('המספר של איש הקשר לא נראה תקין: ' + raw); return; }
+      chooseRecip({ name: name || '', phone: ph });
+    },
+    returned: function (code) { nativeReturned(code); }
+  };
+  function alertLike(t) { showSendStatus(t, 'warn'); }
+
+  $('sendSkip').addEventListener('click', function () {
+    var b = current.batch; if (!b) return;
+    var nx = nextUnsent(b.items, sendIdx + 1);
+    if (nx >= 0) { cancelAutoNext(); sendIdx = nx; showSendStatus(''); showSendItem(b); }
+  });
+  $('sendBack').addEventListener('click', function () { cancelAutoNext(); goBack('#b-' + current.batch.id); });
+
+  /* =========================================================
+     Install, service worker, start
+     ========================================================= */
+  var installPrompt = null;
+  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+  if (standalone) $('installHint').hidden = true;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installPrompt = e; $('install').hidden = false; });
+  $('install').addEventListener('click', function () {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    installPrompt.userChoice.finally(function () { installPrompt = null; $('install').hidden = true; });
+  });
+  window.addEventListener('appinstalled', function () { $('install').hidden = true; $('installHint').hidden = true; });
+  if (!NATIVE && 'serviceWorker' in navigator && window.isSecureContext) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(noop); });
+  }
+
+  window.__bcwa = { batches: function () { return batches; }, store: store, version: VERSION, normalizePhone: normalizePhone };
+
+  (async function start() {
+    paintDiag();
+    try { batches = (await store.allBatches()) || []; } catch (e) { batches = []; }
+    await purgeOld().catch(noop);
+    nativeReady.then(function () { if (!nativeDet) loadWasm().then(paintDiag, paintDiag); paintDiag(); });
+    route();
+  })();
+})();
+</script>
+</body>
+</html>

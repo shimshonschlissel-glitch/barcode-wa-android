@@ -2,35 +2,53 @@ plugins {
     id("com.android.application")
 }
 
-val run = System.getenv("GITHUB_RUN_NUMBER") ?: "1"
+// The web app in ../web is bundled into the APK as assets/www.
+val webAssets = layout.buildDirectory.dir("generated/webassets")
+val syncWeb by tasks.registering(Sync::class) {
+    from(rootProject.file("web"))
+    into(webAssets.map { it.dir("www") })
+    exclude("sw.js", "*.apk")
+}
+
+// The release key lives outside the repository. Its location and passwords come from
+// ~/.gradle/gradle.properties (bcwa.keystore, bcwa.storePassword, bcwa.keyAlias, bcwa.keyPassword).
+val keystorePath = providers.gradleProperty("bcwa.keystore").orNull
 
 android {
-    namespace = "com.barcodewa.test"
+    namespace = "com.barcodewa.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.barcodewa.test"
+        applicationId = "com.barcodewa.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = run.toInt()
-        versionName = "test-$run"
+        versionCode = 1
+        versionName = "1.0"
     }
 
-    // A fixed key for this throwaway test app only, so a newer test build installs over an older one.
-    // The real app will be signed with a private key kept in GitHub secrets.
+    sourceSets["main"].assets.srcDir(webAssets)
+
     signingConfigs {
-        create("test") {
-            storeFile = file("test.keystore")
-            storePassword = "android"
-            keyAlias = "test"
-            keyPassword = "android"
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = providers.gradleProperty("bcwa.storePassword").get()
+                keyAlias = providers.gradleProperty("bcwa.keyAlias").get()
+                keyPassword = providers.gradleProperty("bcwa.keyPassword").get()
+            }
         }
     }
 
     buildTypes {
-        getByName("debug") {
-            signingConfig = signingConfigs.getByName("test")
+        getByName("release") {
+            isMinifyEnabled = false
+            if (keystorePath != null) signingConfig = signingConfigs.getByName("release")
         }
+    }
+
+    // Release lint pulls in a large set of extra libraries; it is not needed for this small app.
+    lint {
+        checkReleaseBuilds = false
     }
 
     compileOptions {
@@ -38,3 +56,5 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
+
+tasks.named("preBuild") { dependsOn(syncWeb) }
