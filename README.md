@@ -1,8 +1,9 @@
-# barcode-wa-android
+# ברקוד לוואטסאפ
 
-אפליקציית אנדרואיד ל"ברקוד לוואטסאפ" (https://barcode-wa.netlify.app).
+סורקים ברקודים של משלוחים ושולחים כל תמונה בוואטסאפ עם המספר שלה ככיתוב.
 
-כרגע: אפליקציית בדיקה בלבד. היא בודקת אם אפשר לפתוח את וואטסאפ ישר בצ'אט של איש קשר עם תמונה וכיתוב,
-אם וואטסאפ חוזר לאפליקציה אחרי השליחה, ואם אפשר לשלוח כמה תמונות בבת אחת עם כיתוב לכל אחת.
+- אתר: https://barcode-wa.netlify.app
+- אפליקציה לאנדרואיד: https://barcode-wa.netlify.app/barcode-wa.apk
 
-הורדה: https://github.com/shimshonschlissel-glitch/barcode-wa-android/releases/latest/download/barcode-wa-test.apk
+מבנה: `web/` האתר (קובץ אחד), `app/` אפליקציית האנדרואיד (מעטפת סביב האתר), `tester/` אפליקציית בדיקה.
+כל הפרטים, ההחלטות ואיך מעדכנים: [CLAUDE.md](CLAUDE.md).
