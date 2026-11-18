@@ -235,6 +235,13 @@ html:not(.native) .app-only { display: none !important; }
 .text-input { width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--paper);
   color: var(--ink); font: 500 1rem/1.3 var(--font-body); }
 .auto-next { display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px; background: var(--ok-bg); color: var(--ok-ink); }
+.guide { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; counter-reset: g; }
+.guide li { counter-increment: g; display: grid; gap: 6px; padding-inline-start: 2.2rem; position: relative; }
+.guide li::before {
+  content: counter(g); position: absolute; inset-inline-start: 0; top: 0; display: grid; place-items: center;
+  width: 1.7rem; height: 1.7rem; border-radius: 50%; border: 1.5px solid var(--ink); font: 600 0.875rem/1 var(--font-mono);
+}
+.guide p { font-size: 0.9375rem; }
 .via { font-size: 0.875rem; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
 .foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.875rem; display: grid; gap: 6px; }
@@ -291,7 +298,7 @@ html:not(.native) .app-only { display: none !important; }
   <footer class="foot">
     <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
     <details class="diag">
-      <summary>פרטי אבחון (גרסה 9)</summary>
+      <summary>פרטי אבחון (גרסה 10)</summary>
       <p id="diag" dir="auto"></p>
     </details>
   </footer>
@@ -382,11 +389,28 @@ html:not(.native) .app-only { display: none !important; }
     <p class="lede app-only" style="font-size:.9375rem" id="appTip">בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.</p>
     <div class="card app-only" id="bubbleInvite" hidden>
       <p style="font-weight:600">כפתור "הבא" מעל וואטסאפ</p>
-      <p class="lede" style="font-size:.9375rem">אחרי "שלח" לוחצים עליו וחוזרים ישר לתמונה הבאה, בלי "חזור" פעמיים. צריך לאשר פעם אחת: "הצגה מעל אפליקציות אחרות".</p>
-      <div class="row">
+      <p class="lede" style="font-size:.9375rem">אחרי "שלח" לוחצים עליו וחוזרים ישר לתמונה הבאה, בלי "חזור" פעמיים. אנדרואיד לא מאפשר לאפליקציה לבקש את ההרשאה בחלון קופץ, אז מאשרים אותה פעם אחת בהגדרות.</p>
+      <div class="row" id="bubbleAsk">
         <button class="btn btn-ink btn-small" id="bubbleOn" type="button">הפעל</button>
         <button class="btn btn-ghost btn-small" id="bubbleNo" type="button">לא עכשיו</button>
       </div>
+      <ol class="guide" id="bubbleGuide" hidden>
+        <li>
+          <p><b>פתח את הרשימה</b> של "הצגה מעל אפליקציות אחרות" (בחלק מהטלפונים: "מופיע למעלה"). מצא בה את <b>ברקוד לוואטסאפ</b> והפעל.</p>
+          <p class="lede" id="guideBlocked">אם מופיעה הודעה שהגישה נחסמה או "הגדרה מוגבלת", לחץ אישור ועבור לשלב 2.</p>
+          <button class="btn btn-ghost btn-small" id="guide1" type="button">פתח את הרשימה</button>
+        </li>
+        <li id="guideStep2">
+          <p><b>אפשר הגדרות מוגבלות.</b> בדף של האפליקציה לחץ על <b>⋮</b> למעלה, ובחר <b>"אפשר הגדרות מוגבלות"</b>. הטלפון יבקש טביעת אצבע או קוד.</p>
+          <p class="lede">אנדרואיד מבקש את זה מכל אפליקציה שהותקנה מקובץ ולא מחנות.</p>
+          <button class="btn btn-ghost btn-small" id="guide2" type="button">פתח את דף האפליקציה</button>
+        </li>
+        <li id="guideStep3">
+          <p><b>חזור לרשימה והפעל</b> את ברקוד לוואטסאפ. עכשיו זה יעבוד.</p>
+          <button class="btn btn-ghost btn-small" id="guide3" type="button">פתח את הרשימה</button>
+        </li>
+      </ol>
+      <p class="status" id="bubbleStatus" role="status" aria-live="polite"></p>
     </div>
     <p class="via app-only" id="via"></p>
   </div>
@@ -597,7 +621,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 9;
+  var VERSION = 10;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -1330,6 +1354,17 @@ html:not(.native) .app-only { display: none !important; }
           });
           via.appendChild(sw);
         }
+        if (HAS_BUBBLE && !bubbleOn()) {
+          var on = el('button', 'link-btn', 'הפעלת כפתור "הבא"');
+          on.type = 'button'; on.style.minHeight = '32px';
+          on.addEventListener('click', function () {
+            try { localStorage.removeItem('bcwa.bubbleNo'); } catch (e) {}
+            paintBubbleInvite();
+            $('bubbleOn').click();
+            $('bubbleInvite').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+          via.appendChild(on);
+        }
       }
     }
     $('sendTo').textContent = NATIVE ? (b.phone ? 'אל: ' + (b.name || fmtPhone(b.phone)) : 'עוד לא נבחר נמען')
@@ -1403,11 +1438,30 @@ html:not(.native) .app-only { display: none !important; }
     if (!HAS_BUBBLE) return;
     var no = false; try { no = localStorage.getItem('bcwa.bubbleNo') === '1'; } catch (e) {}
     var on = bubbleOn();
-    $('bubbleInvite').hidden = on || no;
+    $('bubbleInvite').hidden = (on && !guideOpen) || (no && !guideOpen);
+    if (guideOpen) {
+      var st = $('bubbleStatus');
+      st.textContent = on ? 'מופעל. מעכשיו יופיע כפתור "הבא" מעל וואטסאפ.' : '';
+      if (on) { st.dataset.kind = 'ok'; $('bubbleGuide').hidden = true; } else delete st.dataset.kind;
+    }
     $('appTip').textContent = on ? 'בוואטסאפ לוחצים שלח, ואז על הכפתור הירוק "הבא". התמונה הבאה נפתחת מיד.'
       : 'בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.';
   }
-  $('bubbleOn').addEventListener('click', function () { try { NATIVE.requestOverlay(); } catch (e) {} });
+  // Android 15+ treats "display over other apps" as a restricted setting for apps installed from a file,
+  // so the guide adds the "Allow restricted settings" step there.
+  var RESTRICTED = (nativeInfo.sdk || 0) >= 35;
+  var guideOpen = false;
+  function openOverlayList() { try { NATIVE.requestOverlay(); } catch (e) {} }
+  $('bubbleOn').addEventListener('click', function () {
+    guideOpen = true;
+    $('bubbleAsk').hidden = true;
+    $('bubbleGuide').hidden = false;
+    $('guideStep2').hidden = $('guideStep3').hidden = $('guideBlocked').hidden = !RESTRICTED;
+    if (!RESTRICTED) openOverlayList();
+  });
+  $('guide1').addEventListener('click', openOverlayList);
+  $('guide3').addEventListener('click', openOverlayList);
+  $('guide2').addEventListener('click', function () { try { NATIVE.openAppSettings(); } catch (e) {} });
   $('bubbleNo').addEventListener('click', function () {
     try { localStorage.setItem('bcwa.bubbleNo', '1'); } catch (e) {}
     paintBubbleInvite();

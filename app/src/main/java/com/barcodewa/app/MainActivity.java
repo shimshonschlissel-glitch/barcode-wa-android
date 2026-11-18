@@ -350,6 +350,7 @@ public class MainActivity extends ComponentActivity {
                     try { getPackageManager().getPackageInfo(p, 0); apps.put(p); } catch (PackageManager.NameNotFoundException ignored) { }
                 }
                 o.put("apps", apps);
+                o.put("sdk", Build.VERSION.SDK_INT);
                 return o.toString();
             } catch (Exception e) {
                 return "{\"apps\":[]}";
@@ -467,6 +468,16 @@ public class MainActivity extends ComponentActivity {
                 } catch (ActivityNotFoundException e) {
                     try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)); } catch (ActivityNotFoundException ignored) { }
                 }
+            });
+        }
+
+        /** Opens this app's own page in Settings (where "Allow restricted settings" lives, in the ⋮ menu). */
+        @JavascriptInterface
+        public void openAppSettings() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                } catch (ActivityNotFoundException ignored) { }
             });
         }
 
