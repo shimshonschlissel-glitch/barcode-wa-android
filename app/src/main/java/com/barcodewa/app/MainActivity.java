@@ -302,6 +302,7 @@ public class MainActivity extends ComponentActivity {
         web.onResume();
         bubble.hide();
         int tapped = bubble.consumeTapped();
+        if (waitingWhatsApp) SendLog.add("resume", "");
         String via = tapped == NextBubble.NEXT ? "next" : tapped == NextBubble.STOP ? "stop" : "";
         if (waitingWhatsApp) {
             waitingWhatsApp = false;
@@ -448,11 +449,13 @@ public class MainActivity extends ComponentActivity {
                 try {
                     waitingWhatsApp = true;
                     whatsAppResult = RESULT_FIRST_USER;
-                    // WhatsApp opens in this app's task, for a result: -1 once the photo is sent.
-                    // The floating buttons come back with CLEAR_TOP, which closes WhatsApp's screens,
-                    // so a photo that wasn't sent yet is reported as canceled (0).
+                    // WhatsApp's entry screen answers "OK" at once and opens the chat in WhatsApp's own task,
+                    // so its result says nothing (found 20.11). Instead: a fresh WhatsApp task for every photo
+                    // (CLEAR_TASK), so a photo left unsent doesn't stay open under the next one.
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    SendLog.start(caption);
                     if (floating) bubble.show();
-                    startActivityForResult(i, REQ_SEND);
+                    startActivity(i);
                 } catch (ActivityNotFoundException e) {
                     waitingWhatsApp = false;
                     bubble.hide();
@@ -519,6 +522,12 @@ public class MainActivity extends ComponentActivity {
                     try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)); } catch (ActivityNotFoundException ignored) { }
                 }
             });
+        }
+
+        /** Test log (1.6): WhatsApp's reads of the photo and the button taps, as JSON. */
+        @JavascriptInterface
+        public String sendLog() {
+            return SendLog.json();
         }
 
         /** Opens this app's own page in Settings (where "Allow restricted settings" lives, in the ⋮ menu). */

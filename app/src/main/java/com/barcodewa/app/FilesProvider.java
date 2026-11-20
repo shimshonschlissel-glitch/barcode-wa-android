@@ -5,7 +5,10 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
 import android.provider.OpenableColumns;
 
 import java.io.File;
@@ -16,6 +19,17 @@ import java.io.IOException;
 public class FilesProvider extends ContentProvider {
 
     static final String AUTHORITY = "com.barcodewa.app.files";
+
+    private final Handler main = new Handler(Looper.getMainLooper());
+
+    /** Test log (1.6): only the photo being sent, not exports. */
+    private void log(Uri uri, String event, String detail) {
+        String p = uri.getPath() == null ? "" : uri.getPath();
+        if (!p.toLowerCase(java.util.Locale.ROOT).endsWith(".jpg")) return;
+        String who;
+        try { who = getCallingPackage(); } catch (RuntimeException e) { who = null; }
+        SendLog.add(event, (who == null ? "" : who.replaceFirst("^com\\.whatsapp", "wa")) + (detail.isEmpty() ? "" : " " + detail));
+    }
 
     @Override
     public boolean onCreate() {
@@ -36,13 +50,25 @@ public class FilesProvider extends ContentProvider {
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-        return ParcelFileDescriptor.open(fileFor(uri), ParcelFileDescriptor.MODE_READ_ONLY);
+        File f = fileFor(uri);
+        log(uri, "open", mode);
+        final long opened = SystemClock.elapsedRealtime();
+        final boolean photo = f.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".jpg");
+        try {
+            // Same read-only file as before; the listener only says when WhatsApp lets go of it.
+            return ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY, main, e -> {
+                if (photo) SendLog.add("close", "אחרי " + (SystemClock.elapsedRealtime() - opened) + "ms");
+            });
+        } catch (IOException e) {
+            return ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY);
+        }
     }
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
         File f;
         try { f = fileFor(uri); } catch (FileNotFoundException e) { return null; }
+        log(uri, "query", projection == null ? "" : String.join(",", projection).replace("_display_name", "name").replace("_size", "size"));
         String[] cols = projection != null ? projection : new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE};
         MatrixCursor c = new MatrixCursor(cols, 1);
         Object[] row = new Object[cols.length];
@@ -58,6 +84,7 @@ public class FilesProvider extends ContentProvider {
     public String getType(Uri uri) {
         String p = uri.getPath() == null ? "" : uri.getPath().toLowerCase(java.util.Locale.ROOT);
         if (p.endsWith(".csv")) return "text/csv";
+        log(uri, "type", "");
         return "image/jpeg";
     }
 

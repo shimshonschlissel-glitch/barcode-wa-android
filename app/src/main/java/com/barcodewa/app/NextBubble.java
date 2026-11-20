@@ -205,6 +205,7 @@ final class NextBubble {
     }
 
     private void onTap(int which) {
+        SendLog.add("tap", which == NEXT ? "next" : which == STOP ? "stop" : "skip");
         boolean open = stillOpen != null && stillOpen.check();   // also notes the screen for diagnostics
         if (which == NEXT && open) showPrompt();
         else backToApp(which);
@@ -251,8 +252,8 @@ final class NextBubble {
         prompt.addView(row, fullGap);
 
         send.setOnClickListener(v -> { removePrompt(); show(); });
-        skip.setOnClickListener(v -> backToApp(SKIP));
-        halt.setOnClickListener(v -> backToApp(STOP));
+        skip.setOnClickListener(v -> { SendLog.add("tap", "skip"); backToApp(SKIP); });
+        halt.setOnClickListener(v -> { SendLog.add("tap", "stop"); backToApp(STOP); });
 
         int type = Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE;
         WindowManager.LayoutParams plp = new WindowManager.LayoutParams(Math.min(dm.widthPixels - dp(32), dp(420)),
