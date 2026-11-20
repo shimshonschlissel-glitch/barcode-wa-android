@@ -302,7 +302,7 @@ html:not(.native) .app-only { display: none !important; }
   <footer class="foot">
     <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
     <details class="diag">
-      <summary>פרטי אבחון (גרסה 14)</summary>
+      <summary>פרטי אבחון (גרסה 15)</summary>
       <p id="diag" dir="auto"></p>
     </details>
   </footer>
@@ -633,7 +633,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 14;
+  var VERSION = 15;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -1461,7 +1461,7 @@ html:not(.native) .app-only { display: none !important; }
     var auto = on && autoBackOn();
     $('autoBackRow').hidden = !on;
     $('autoBack').checked = autoBackOn();
-    $('appTip').textContent = auto ? 'בוואטסאפ לוחצים "שלח", והאפליקציה חוזרת לבד לתמונה הבאה. "עצור" מחזיר לכאן בלי להמשיך.'
+    $('appTip').textContent = auto ? 'בוואטסאפ לוחצים "שלח", והאפליקציה חוזרת לבד לתמונה הבאה. הכפתור "עצור" שמעל וואטסאפ מחזיר לכאן בלי להמשיך.'
       : on ? 'בוואטסאפ לוחצים "שלח", ואז על הכפתור הירוק "הבא". "עצור" מחזיר לכאן בלי להמשיך.'
       : 'בוואטסאפ לוחצים "שלח", ואז חזור. האפליקציה יודעת אם התמונה נשלחה.';
   }
@@ -1522,6 +1522,7 @@ html:not(.native) .app-only { display: none !important; }
       nativePending = { b: b, it: it, at: Date.now() };
       if (HAS_BUBBLE) { try { NATIVE.setBubbleLabel(bubbleLabel(b, it)); } catch (e) {} }
       if (NATIVE && typeof NATIVE.setAutoReturn === 'function') { try { NATIVE.setAutoReturn(autoBackOn()); } catch (e) {} }
+      if (NATIVE && typeof NATIVE.setRecipient === 'function') { try { NATIVE.setRecipient(b.name || fmtPhone(b.phone)); } catch (e) {} }
       $('markSent').hidden = true; lastUnsent = null;
       var err = NATIVE.send(waPkg(), b.phone, it.code, safeName(it.code), b64);
       if (err) { nativePending = null; $('sendNext').disabled = false; showSendStatus(err, 'warn'); }
@@ -1531,7 +1532,7 @@ html:not(.native) .app-only { display: none !important; }
     }
   }
   // Test log (app 1.6): WhatsApp's reads of the photo and the button taps.
-  var LOG_NAMES = { query: 'שאלה על הקובץ', type: 'שאלה על הסוג', open: 'פתיחת הקובץ', close: 'סגירת הקובץ', tap: 'לחיצה', resume: 'חזרה לאפליקציה', sent: '✓ זוהתה שליחה' };
+  var LOG_NAMES = { query: 'שאלה על הקובץ', type: 'שאלה על הסוג', open: 'פתיחת הקובץ', close: 'סגירת הקובץ', tap: 'לחיצה', resume: 'חזרה לאפליקציה', sent: '✓ זוהתה שליחה', picker: 'וואטסאפ פתח בחירת נמען', picked: 'נבחר נמען' };
   var TAP_NAMES = { next: 'הבא', stop: 'עצור', skip: 'דלג', auto: 'חזרה אוטומטית', confirm: 'כבר שלחתי', dismiss: 'אשלח עכשיו' };
   function sendLogLines() {
     var list = [], out = [], n = 0;
@@ -1614,9 +1615,11 @@ html:not(.native) .app-only { display: none !important; }
       showSendStatus('נעצר. התמונה הקודמת נשלחה. לחץ "שלח" כדי להמשיך.');
       return;
     }
-    openNextSoon(b, via === 'next' || via === 'skip' || via === 'auto' ? 300 : 1300);
+    // After an automatic return, a short pause: after several quick photos WhatsApp stops opening
+    // the chat directly and asks for the recipient (20.11).
+    openNextSoon(b, via === 'auto' ? AUTO_PAUSE_MS : via === 'next' || via === 'skip' ? 300 : 1300);
   }
-  var lastUnsent = null;
+  var lastUnsent = null, AUTO_PAUSE_MS = 2000;
   $('markSent').addEventListener('click', async function () {
     var u = lastUnsent; lastUnsent = null;
     $('markSent').hidden = true;
@@ -1701,8 +1704,11 @@ html:not(.native) .app-only { display: none !important; }
     if (!b || current.view !== 'scan') { reply('error', 'אין משלוח פתוח.'); return; }
     code = cleanCode(code);
     if (!code) { reply('error', 'המספר ריק.'); return; }
+    // The same code can arrive again while the first one is still being saved (20.11: listed twice).
+    if (scanSaving[code]) { reply('dup', 'כבר ברשימה: ' + code); return; }
     var f = findCode(code);
     if (f.here >= 0) { reply('dup', 'כבר ברשימה (פריט ' + (f.here + 1) + '): ' + code); return; }
+    scanSaving[code] = true;
     try {
       var blob = await fetch(url).then(function (r) { if (!r.ok) throw new Error('fetch'); return r.blob(); });
       var bmp = await createImageBitmap(blob);
@@ -1715,8 +1721,11 @@ html:not(.native) .app-only { display: none !important; }
       else reply('ok', 'נוסף: ' + code);
     } catch (e) {
       reply('error', 'התמונה לא נשמרה. נסה שוב.');
+    } finally {
+      delete scanSaving[code];
     }
   }
+  var scanSaving = {};
   function alertLike(t) { showSendStatus(t, 'warn'); }
 
   $('sendSkip').addEventListener('click', function () {

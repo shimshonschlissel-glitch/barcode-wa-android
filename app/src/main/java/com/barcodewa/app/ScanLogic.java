@@ -42,6 +42,13 @@ final class ScanLogic {
 
     static final long HELD_MS = 1500;
     static final long CAND_MS = 800;
+    /**
+     * A code taken in the last few seconds is not taken again, even if other codes were read in between.
+     * On a sheet with several barcodes close together the aim can wander A → B → A within a second;
+     * remembering only the last code (held) let A through twice (found 20.11).
+     */
+    static final long RECENT_MS = 4000;
+    private final java.util.Map<String, Long> recent = new java.util.HashMap<>();
 
     private String held;
     private long heldAt;
@@ -108,6 +115,12 @@ final class ScanLogic {
         String v = hit.value.trim();
         if (v.equals(held)) {
             heldAt = now;
+            if (recent.containsKey(v)) recent.put(v, now);
+            return null;
+        }
+        Long seen = recent.get(v);
+        if (seen != null && now - seen < RECENT_MS) {
+            recent.put(v, now);       // still in view: keep it quiet
             return null;
         }
         if (v.equals(cand)) count++;
@@ -121,6 +134,8 @@ final class ScanLogic {
         count = 0;
         held = v;
         heldAt = now;
+        recent.values().removeIf(t -> now - t >= RECENT_MS);
+        recent.put(v, now);
         return new Hit(v, hit.format, hit.cx, hit.cy);
     }
 
@@ -132,6 +147,7 @@ final class ScanLogic {
     /** Forget everything, e.g. when the scanner opens again. */
     synchronized void reset() {
         held = null;
+        recent.clear();
         cand = null;
         count = 0;
     }

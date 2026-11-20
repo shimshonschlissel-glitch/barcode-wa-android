@@ -24,7 +24,9 @@ final class SendLog {
     private static final int KEEP_SENDS = 3;
     private static final SendSignal signal = new SendSignal();
     private static String file = "";
-    private static Runnable onSent;
+    private static Runnable onSent, onOpen;
+    private static int opens = 0;          // WhatsApp opened the current photo (0 = it hasn't loaded it)
+    private static boolean asked = false;  // WhatsApp asked anything about the current photo
     private static final List<Object[]> entries = new ArrayList<>();   // {send number, ms, event, detail}
     private static int sendNo = 0;
     private static long t0 = 0;
@@ -36,12 +38,31 @@ final class SendLog {
         t0 = SystemClock.elapsedRealtime();
         file = fileName == null ? "" : fileName;
         signal.reset();
+        opens = 0;
+        asked = false;
         entries.removeIf(e -> (int) e[0] <= sendNo - KEEP_SENDS);
         entries.add(new Object[]{sendNo, 0L, "start", code});
     }
 
     static void setOnSent(Runnable r) {
         onSent = r;
+    }
+
+    /** Called when WhatsApp opens the current photo, i.e. its send screen is loading it. */
+    static void setOnOpen(Runnable r) {
+        onOpen = r;
+    }
+
+    static synchronized int current() {
+        return sendNo;
+    }
+
+    static synchronized int opens() {
+        return opens;
+    }
+
+    static synchronized boolean asked() {
+        return asked;
     }
 
     /** True once WhatsApp has shown the "send" signal for the current photo. */
@@ -51,15 +72,18 @@ final class SendLog {
 
     /** WhatsApp asked about (type / query) or opened (open) a file this app shares. */
     static void access(String fileName, String event, String detail) {
-        Runnable fire = null;
+        Runnable fire = null, opened = null;
         synchronized (SendLog.class) {
             add(event, detail);
             if (sendNo == 0 || !file.equals(fileName)) return;
+            asked = true;
+            if ("open".equals(event)) { opens++; opened = onOpen; }
             if (signal.onAccess(event, SystemClock.elapsedRealtime() - t0)) {
                 add("sent", "");
                 fire = onSent;
             }
         }
+        if (opened != null) opened.run();
         if (fire != null) fire.run();
     }
 

@@ -78,6 +78,8 @@ public class MainActivity extends ComponentActivity {
     /** Come back by itself a moment after WhatsApp's "send" (the page's setting). */
     private boolean autoReturn = true;
     private static final long AUTO_BACK_MS = 1000;
+    /** The chat's name as the person knows it, for the "choose the recipient" note. */
+    private String recipientName = "";
 
     @Override
     protected void onCreate(Bundle state) {
@@ -91,6 +93,7 @@ public class MainActivity extends ComponentActivity {
         bubble = new NextBubble(this);
         bubble.setStillOpen(() -> waitingWhatsApp && !SendLog.sent());
         SendLog.setOnSent(() -> ui.post(this::onWhatsAppSent));
+        SendLog.setOnOpen(() -> ui.post(() -> { if (bubble.hintShowing()) { bubble.hideHint(); SendLog.add("picked", ""); } }));
         scanOverlay = new ScanOverlay(this, root, new ScanOverlay.Listener() {
             @Override
             public void onCode(String code, String format, String fileName) {
@@ -308,6 +311,21 @@ public class MainActivity extends ComponentActivity {
         }
     }
 
+    /**
+     * Normally WhatsApp opens the photo within half a second (straight into the chat). If it only asked
+     * about the photo and didn't open it, it is showing "Send to…" (it ignored the chat number: seen after
+     * a few quick photos on 20.11). Then a note says which chat to pick; it goes when the photo opens.
+     */
+    private void checkPicker(int sendNo, int attempt) {
+        if (!waitingWhatsApp || SendLog.current() != sendNo || SendLog.opens() > 0) return;
+        if (!SendLog.asked()) {
+            if (attempt < 3) ui.postDelayed(() -> checkPicker(sendNo, attempt + 1), 1000);
+            return;
+        }
+        SendLog.add("picker", "");
+        bubble.showHint(recipientName.isEmpty() ? "וואטסאפ מבקש לבחור למי לשלוח" : "וואטסאפ מבקש לבחור למי לשלוח: " + recipientName);
+    }
+
     /** WhatsApp showed the "send" signal (SendLog). Come back by itself, or mark the floating button. */
     private void onWhatsAppSent() {
         if (!waitingWhatsApp) return;
@@ -429,6 +447,8 @@ public class MainActivity extends ComponentActivity {
                     bubble.setAutoReturn(autoReturn);
                     if (floating) bubble.show();
                     startActivity(i);
+                    final int n = SendLog.current();
+                    if (floating) ui.postDelayed(() -> checkPicker(n, 1), 1500);
                 } catch (ActivityNotFoundException e) {
                     waitingWhatsApp = false;
                     bubble.hide();
@@ -495,6 +515,12 @@ public class MainActivity extends ComponentActivity {
                     try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)); } catch (ActivityNotFoundException ignored) { }
                 }
             });
+        }
+
+        /** The recipient's name, for the note shown if WhatsApp asks which chat to send to. */
+        @JavascriptInterface
+        public void setRecipient(String name) {
+            runOnUiThread(() -> recipientName = name == null ? "" : name.trim());
         }
 
         /** Come back by itself a moment after WhatsApp's "send" (needs the floating-button permission). */

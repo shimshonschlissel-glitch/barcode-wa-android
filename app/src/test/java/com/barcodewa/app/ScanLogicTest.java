@@ -64,8 +64,23 @@ public class ScanLogicTest {
         assertNotNull(l.offer(one("QQ", "QR", 500, 250), box, 0));
         assertNull(l.offer(one("QQ", "QR", 500, 250), box, 500));
         assertNull(l.offer(one("QQ", "QR", 500, 250), box, 1900));   // still in view: held keeps renewing
+        // back after a short look away: still the same reading (the page would only say "already listed")
+        assertNull(l.offer(one("QQ", "QR", 500, 250), box, 1900 + ScanLogic.HELD_MS + 10));
         // out of view long enough, then back: a new reading
-        assertNotNull(l.offer(one("QQ", "QR", 500, 250), box, 1900 + ScanLogic.HELD_MS + 10));
+        assertNotNull(l.offer(one("QQ", "QR", 500, 250), box, 1900 + ScanLogic.HELD_MS + 10 + ScanLogic.RECENT_MS));
+    }
+
+    @Test
+    public void aimWanderingBetweenNeighboursDoesNotTakeACodeTwice() {
+        // 20.11: on a sheet with several codes the aim went A, B, A within a second, and A was listed twice.
+        ScanLogic l = new ScanLogic();
+        assertNotNull(l.offer(one("buy now", "QR", 500, 250), box, 0));
+        assertNull(l.offer(one("01234565", "UPC-E", 500, 250), box, 150));
+        assertNotNull(l.offer(one("01234565", "UPC-E", 500, 250), box, 250));
+        assertNull(l.offer(one("buy now", "QR", 500, 250), box, 400));
+        assertNull(l.offer(one("buy now", "QR", 500, 250), box, 500));
+        assertNull(l.offer(one("01234565", "UPC-E", 500, 250), box, 700));
+        assertNull(l.offer(one("01234565", "UPC-E", 500, 250), box, 800));
     }
 
     @Test
