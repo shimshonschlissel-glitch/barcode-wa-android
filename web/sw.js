@@ -1,5 +1,5 @@
 // Keeps the app working without a connection. Bump VERSION when any file changes.
-const VERSION = 'v11';
+const VERSION = 'v12';
 const SHELL = ['./', 'index.html', 'zxing-reader.js', 'zxing_reader.wasm', 'manifest.webmanifest',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 

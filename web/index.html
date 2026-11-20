@@ -298,7 +298,7 @@ html:not(.native) .app-only { display: none !important; }
   <footer class="foot">
     <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
     <details class="diag">
-      <summary>פרטי אבחון (גרסה 11)</summary>
+      <summary>פרטי אבחון (גרסה 12)</summary>
       <p id="diag" dir="auto"></p>
     </details>
   </footer>
@@ -621,7 +621,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 11;
+  var VERSION = 12;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -1503,16 +1503,30 @@ html:not(.native) .app-only { display: none !important; }
   }
   function cancelAutoNext() { clearTimeout(autoTimer); autoTimer = 0; $('autoNext').hidden = true; }
   // Called by the app when the person comes back from WhatsApp.
-  // code: WhatsApp's answer (-1 sent, 0 not sent, 1 no answer). via: 'next' / 'stop' (floating buttons) or '' (Back).
-  async function nativeReturned(code, via) {
+  // code: WhatsApp's answer (-1 sent, 0 not sent, 1 no answer).
+  // via: 'next' / 'stop' / 'skip' (floating buttons and the card over WhatsApp) or '' (Back). top: WhatsApp's screen at the tap.
+  async function nativeReturned(code, via, top) {
     var p = nativePending; nativePending = null;
     if (!p) return;
     if (via === true) via = 'next';
     via = via || '';
     diag.last = 'חזרה מוואטסאפ: ' + (code === -1 ? 'נשלח' : code === 0 ? 'לא נשלח' : 'בלי תשובה') + ' (קוד ' + code + '), ' +
-      (via === 'next' ? 'כפתור הבא' : via === 'stop' ? 'כפתור עצור' : 'חזור') + ', אחרי ' + ((Date.now() - p.at) / 1000).toFixed(1) + ' שניות';
+      ({ next: 'כפתור הבא', stop: 'כפתור עצור', skip: 'דלג' }[via] || 'חזור') + ', אחרי ' + ((Date.now() - p.at) / 1000).toFixed(1) + ' שניות' +
+      (top ? ', מסך ' + top : '');
     paintDiag();
     var b = p.b;
+    if (code === 0 && via === 'skip') {
+      // Chosen on the card over WhatsApp: leave this one unsent and open the next.
+      if (current.view !== 'send' || current.batch !== b) return;
+      var nx = nextUnsent(b.items, b.items.indexOf(p.it) + 1);
+      $('sendNext').disabled = false;
+      if (nx < 0 || b.items[nx] === p.it) { showSendStatus('זה הפריט האחרון שלא נשלח.', 'warn'); return; }
+      sendIdx = nx;
+      showSendStatus('');
+      await showSendItem(b);
+      openNextSoon(b, 300);
+      return;
+    }
     if (code === 0) {
       $('sendNext').disabled = false;
       showSendStatus(via === 'next' ? 'התמונה לא נשלחה: נראה שלחצת "הבא" לפני "שלח" בוואטסאפ. לחץ "שלח" כדי לפתוח אותה שוב.'
@@ -1532,14 +1546,17 @@ html:not(.native) .app-only { display: none !important; }
       showSendStatus('נעצר. התמונה הקודמת נשלחה. לחץ "שלח" כדי להמשיך.');
       return;
     }
-    // Open the next one by itself, with a moment to stop.
+    openNextSoon(b, via === 'next' || via === 'skip' ? 300 : 1300);
+  }
+  // Open the next one by itself, with a moment to stop.
+  function openNextSoon(b, ms) {
     $('autoNextText').textContent = 'פריט ' + (sendIdx + 1) + ' נפתח עוד רגע\u2026';
     $('autoNext').hidden = false;
     var it = b.items[sendIdx];
     autoTimer = setTimeout(function () {
       $('autoNext').hidden = true;
       if (current.view === 'send' && current.batch === b && b.items[sendIdx] === it) nativeSend(b, it);
-    }, via === 'next' ? 300 : 1300);
+    }, ms);
   }
   $('autoStop').addEventListener('click', function () { cancelAutoNext(); showSendStatus('נעצר. לחץ "שלח" כדי להמשיך.'); });
 
@@ -1588,7 +1605,7 @@ html:not(.native) .app-only { display: none !important; }
       if (!ph) { alertLike('המספר של איש הקשר לא נראה תקין: ' + raw); return; }
       chooseRecip({ name: name || '', phone: ph });
     },
-    returned: function (code, via) { nativeReturned(code, via); },
+    returned: function (code, via, top) { nativeReturned(code, via, top); },
     // The app's scanner found a code: store it like a web scan and report back what happened.
     scanItem: function (code, format, url) { nativeScanItem(code, format, url); },
     scanDone: function (reason) {

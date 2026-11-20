@@ -1,10 +1,13 @@
 package com.barcodewa.app;
 
 import android.Manifest;
+import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Insets;
@@ -75,6 +78,10 @@ public class MainActivity extends ComponentActivity {
     private boolean waitingWhatsApp = false;
     /** WhatsApp's answer: -1 sent, 0 not sent, 1 no answer arrived. */
     private int whatsAppResult = RESULT_FIRST_USER;
+    /** The WhatsApp screen this app opened (and its real class, if it is an alias). */
+    private String launchedName = "", launchedTarget = "";
+    /** What was on top of this app's task when a floating button was last tapped, for diagnostics. */
+    private String lastTop = "";
 
     @Override
     protected void onCreate(Bundle state) {
@@ -86,6 +93,7 @@ public class MainActivity extends ComponentActivity {
         keepClearOfSystemBars(root);
         setContentView(root);
         bubble = new NextBubble(this);
+        bubble.setStillOpen(this::whatsAppStillOpen);
         scanOverlay = new ScanOverlay(this, root, new ScanOverlay.Listener() {
             @Override
             public void onCode(String code, String format, String fileName) {
@@ -297,8 +305,37 @@ public class MainActivity extends ComponentActivity {
         String via = tapped == NextBubble.NEXT ? "next" : tapped == NextBubble.STOP ? "stop" : "";
         if (waitingWhatsApp) {
             waitingWhatsApp = false;
-            js("window.__bcwaNative && window.__bcwaNative.returned(" + whatsAppResult + ",'" + via + "')");
+            js("window.__bcwaNative && window.__bcwaNative.returned(" + whatsAppResult + ",'" + via + "'," + JSONObject.quote(lastTop) + ")");
         }
+        lastTop = "";
+    }
+
+    /**
+     * WhatsApp runs inside this app's task, so the app may see which of its screens is on top.
+     * Still open = WhatsApp's media composer, or the screen this app opened, is on top: nothing was sent yet.
+     * If the system doesn't say, answer "no" and let WhatsApp's own result decide after coming back.
+     */
+    private boolean whatsAppStillOpen() {
+        ComponentName top = topOfTask();
+        lastTop = top == null ? "?" : top.getClassName().replaceFirst("^com\\.whatsapp\\.", "");
+        if (top == null || !waitingWhatsApp || getPackageName().equals(top.getPackageName())) return false;
+        String cls = top.getClassName();
+        return cls.toLowerCase(Locale.ROOT).contains("composer") || cls.equals(launchedName) || cls.equals(launchedTarget);
+    }
+
+    @SuppressWarnings("deprecation")
+    private ComponentName topOfTask() {
+        try {
+            ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            int me = getTaskId();
+            for (ActivityManager.AppTask t : am.getAppTasks()) {
+                ActivityManager.RecentTaskInfo ti = t.getTaskInfo();
+                if (ti == null) continue;
+                int id = Build.VERSION.SDK_INT >= 29 ? ti.taskId : ti.persistentId;
+                if (id == me) return ti.topActivity;
+            }
+        } catch (Throwable ignored) { }
+        return null;
     }
 
     @Override
@@ -399,6 +436,14 @@ public class MainActivity extends ComponentActivity {
             i.putExtra("jid", phone + "@s.whatsapp.net");
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             final boolean floating = NextBubble.allowed(MainActivity.this);
+            launchedName = launchedTarget = "";
+            try {
+                ResolveInfo ri = getPackageManager().resolveActivity(i, 0);
+                if (ri != null && ri.activityInfo != null) {
+                    launchedName = ri.activityInfo.name;
+                    launchedTarget = ri.activityInfo.targetActivity != null ? ri.activityInfo.targetActivity : "";
+                }
+            } catch (RuntimeException ignored) { }
             runOnUiThread(() -> {
                 try {
                     waitingWhatsApp = true;
