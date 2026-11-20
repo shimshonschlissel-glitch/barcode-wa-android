@@ -298,7 +298,7 @@ html:not(.native) .app-only { display: none !important; }
   <footer class="foot">
     <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
     <details class="diag">
-      <summary>פרטי אבחון (גרסה 10)</summary>
+      <summary>פרטי אבחון (גרסה 11)</summary>
       <p id="diag" dir="auto"></p>
     </details>
   </footer>
@@ -621,7 +621,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 10;
+  var VERSION = 11;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -1444,7 +1444,7 @@ html:not(.native) .app-only { display: none !important; }
       st.textContent = on ? 'מופעל. מעכשיו יופיע כפתור "הבא" מעל וואטסאפ.' : '';
       if (on) { st.dataset.kind = 'ok'; $('bubbleGuide').hidden = true; } else delete st.dataset.kind;
     }
-    $('appTip').textContent = on ? 'בוואטסאפ לוחצים שלח, ואז על הכפתור הירוק "הבא". התמונה הבאה נפתחת מיד.'
+    $('appTip').textContent = on ? 'בוואטסאפ לוחצים שלח, ואז על הכפתור הירוק "הבא". "עצור" מחזיר לכאן בלי לפתוח את הבאה.'
       : 'בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.';
   }
   // Android 15+ treats "display over other apps" as a restricted setting for apps installed from a file,
@@ -1492,7 +1492,7 @@ html:not(.native) .app-only { display: none !important; }
     $('sendNext').disabled = true;
     try {
       var b64 = await blobToB64(rec.full);
-      nativePending = { b: b, it: it };
+      nativePending = { b: b, it: it, at: Date.now() };
       if (HAS_BUBBLE) { try { NATIVE.setBubbleLabel(bubbleLabel(b, it)); } catch (e) {} }
       var err = NATIVE.send(waPkg(), b.phone, it.code, safeName(it.code), b64);
       if (err) { nativePending = null; $('sendNext').disabled = false; showSendStatus(err, 'warn'); }
@@ -1502,15 +1502,22 @@ html:not(.native) .app-only { display: none !important; }
     }
   }
   function cancelAutoNext() { clearTimeout(autoTimer); autoTimer = 0; $('autoNext').hidden = true; }
-  // Called by the app when the person comes back from WhatsApp. code: Activity result (-1 OK, 0 canceled).
-  async function nativeReturned(code, viaBubble) {
+  // Called by the app when the person comes back from WhatsApp.
+  // code: WhatsApp's answer (-1 sent, 0 not sent, 1 no answer). via: 'next' / 'stop' (floating buttons) or '' (Back).
+  async function nativeReturned(code, via) {
     var p = nativePending; nativePending = null;
     if (!p) return;
-    diag.last = 'חזרה מוואטסאפ, קוד ' + code; paintDiag();
+    if (via === true) via = 'next';
+    via = via || '';
+    diag.last = 'חזרה מוואטסאפ: ' + (code === -1 ? 'נשלח' : code === 0 ? 'לא נשלח' : 'בלי תשובה') + ' (קוד ' + code + '), ' +
+      (via === 'next' ? 'כפתור הבא' : via === 'stop' ? 'כפתור עצור' : 'חזור') + ', אחרי ' + ((Date.now() - p.at) / 1000).toFixed(1) + ' שניות';
+    paintDiag();
     var b = p.b;
     if (code === 0) {
       $('sendNext').disabled = false;
-      showSendStatus('נראה שהתמונה לא נשלחה. לחץ "שלח" כדי לנסות שוב.', 'warn');
+      showSendStatus(via === 'next' ? 'התמונה לא נשלחה: נראה שלחצת "הבא" לפני "שלח" בוואטסאפ. לחץ "שלח" כדי לפתוח אותה שוב.'
+        : via === 'stop' ? 'נעצר. התמונה הזו לא נשלחה. לחץ "שלח" כדי להמשיך ממנה.'
+        : 'נראה שהתמונה לא נשלחה. לחץ "שלח" כדי לנסות שוב.', 'warn');
       return;
     }
     p.it.sentAt = Date.now();
@@ -1520,6 +1527,11 @@ html:not(.native) .app-only { display: none !important; }
     sendIdx = nextUnsent(b.items, b.items.indexOf(p.it) + 1);
     await showSendItem(b);
     if (sendIdx < 0) return;
+    if (via === 'stop') {
+      $('sendNext').disabled = false;
+      showSendStatus('נעצר. התמונה הקודמת נשלחה. לחץ "שלח" כדי להמשיך.');
+      return;
+    }
     // Open the next one by itself, with a moment to stop.
     $('autoNextText').textContent = 'פריט ' + (sendIdx + 1) + ' נפתח עוד רגע\u2026';
     $('autoNext').hidden = false;
@@ -1527,7 +1539,7 @@ html:not(.native) .app-only { display: none !important; }
     autoTimer = setTimeout(function () {
       $('autoNext').hidden = true;
       if (current.view === 'send' && current.batch === b && b.items[sendIdx] === it) nativeSend(b, it);
-    }, viaBubble ? 300 : 1300);
+    }, via === 'next' ? 300 : 1300);
   }
   $('autoStop').addEventListener('click', function () { cancelAutoNext(); showSendStatus('נעצר. לחץ "שלח" כדי להמשיך.'); });
 
@@ -1576,7 +1588,7 @@ html:not(.native) .app-only { display: none !important; }
       if (!ph) { alertLike('המספר של איש הקשר לא נראה תקין: ' + raw); return; }
       chooseRecip({ name: name || '', phone: ph });
     },
-    returned: function (code, viaBubble) { nativeReturned(code, !!viaBubble); },
+    returned: function (code, via) { nativeReturned(code, via); },
     // The app's scanner found a code: store it like a web scan and report back what happened.
     scanItem: function (code, format, url) { nativeScanItem(code, format, url); },
     scanDone: function (reason) {

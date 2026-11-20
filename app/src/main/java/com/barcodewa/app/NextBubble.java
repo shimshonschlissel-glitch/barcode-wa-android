@@ -18,15 +18,20 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
+import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * A small "next" button that floats over WhatsApp while a shipment is being sent.
- * Tapping it brings the app back to the front (the page then opens the next photo at once),
- * instead of pressing Back twice. It can be dragged; its place is remembered.
+ * Two small buttons that float over WhatsApp while a shipment is being sent: "next" and "stop".
+ * Either one brings the app back to the front and closes WhatsApp's screens on the way, so WhatsApp
+ * reports whether the photo was really sent. After "next" the page opens the next photo at once
+ * (only if it was sent); after "stop" it waits. They can be dragged together; the place is remembered.
  * Needs the "display over other apps" permission, which the person grants once in Settings.
  */
 final class NextBubble {
+
+    static final int NONE = 0, NEXT = 1, STOP = 2;
 
     private static final long MAX_SHOWN_MS = 10 * 60 * 1000;   // never linger over other apps
 
@@ -34,10 +39,11 @@ final class NextBubble {
     private final WindowManager wm;
     private final SharedPreferences prefs;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private TextView view;
+    private LinearLayout view;
+    private TextView next, stop;
     private WindowManager.LayoutParams lp;
     private String label = "הבא ‹";
-    private volatile boolean tapped = false;
+    private volatile int tapped = NONE;
 
     NextBubble(Context context) {
         this.app = context.getApplicationContext();
@@ -51,13 +57,21 @@ final class NextBubble {
 
     void setLabel(String text) {
         if (text != null && !text.trim().isEmpty()) label = text.trim();
-        if (view != null) view.setText(label);
+        if (next != null) {
+            next.setText(label);
+            stop.setVisibility(isLast() ? View.GONE : View.VISIBLE);
+        }
     }
 
-    /** True once if the person came back by tapping the bubble (not with Back). */
-    boolean consumeTapped() {
-        boolean t = tapped;
-        tapped = false;
+    /** On the last photo the button reads "סיום ✓" and there is nothing to stop. */
+    private boolean isLast() {
+        return label.startsWith("סיום");
+    }
+
+    /** Which button brought the person back, once: NEXT, STOP, or NONE (they used Back). */
+    int consumeTapped() {
+        int t = tapped;
+        tapped = NONE;
         return t;
     }
 
@@ -66,25 +80,23 @@ final class NextBubble {
     }
 
     @SuppressWarnings("deprecation")
-    @SuppressLint("ClickableViewAccessibility")
     void show() {
         if (view != null || !allowed(app)) return;
         DisplayMetrics dm = app.getResources().getDisplayMetrics();
-        int pad = dp(18);
-        view = new TextView(app);
-        view.setText(label);
-        view.setTextColor(Color.WHITE);
-        view.setTypeface(Typeface.DEFAULT_BOLD);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        view.setPadding(pad, dp(12), pad, dp(12));
-        view.setGravity(Gravity.CENTER);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.rgb(14, 122, 68));
-        bg.setCornerRadius(dp(28));
-        bg.setStroke(dp(2), Color.WHITE);
-        view.setBackground(bg);
-        view.setElevation(dp(8));
-        view.setContentDescription("חזרה לאפליקציה ופתיחת התמונה הבאה");
+        next = pill(label, Color.rgb(14, 122, 68), 18, 18);
+        next.setContentDescription("נשלח. חזרה לאפליקציה ופתיחת התמונה הבאה");
+        stop = pill("עצור", Color.rgb(48, 48, 48), 15, 14);
+        stop.setContentDescription("עצירה: חזרה לאפליקציה בלי לפתוח את התמונה הבאה");
+        stop.setVisibility(isLast() ? View.GONE : View.VISIBLE);
+        view = new LinearLayout(app);
+        view.setOrientation(LinearLayout.HORIZONTAL);
+        view.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);   // "next" on the right, "stop" on its left
+        view.setGravity(Gravity.CENTER_VERTICAL);
+        view.setPadding(dp(4), dp(4), dp(4), dp(4));
+        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        gap.setMarginStart(dp(10));
+        view.addView(next);
+        view.addView(stop, gap);
 
         int type = Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE;
         lp = new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, type,
@@ -94,14 +106,47 @@ final class NextBubble {
         lp.x = prefs.getInt("x", dp(16));
         lp.y = prefs.getInt("y", dm.heightPixels - dp(230));
 
+        next.setOnTouchListener(dragOrTap(NEXT));
+        stop.setOnTouchListener(dragOrTap(STOP));
+        try {
+            wm.addView(view, lp);
+        } catch (RuntimeException e) {
+            view = null;
+            next = stop = null;
+            return;
+        }
+        main.removeCallbacksAndMessages(null);
+        main.postDelayed(this::hide, MAX_SHOWN_MS);
+    }
+
+    private TextView pill(String text, int color, int sp, int padH) {
+        TextView t = new TextView(app);
+        t.setText(text);
+        t.setTextColor(Color.WHITE);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        t.setPadding(dp(padH), dp(12), dp(padH), dp(12));
+        t.setGravity(Gravity.CENTER);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(dp(28));
+        bg.setStroke(dp(2), Color.WHITE);
+        t.setBackground(bg);
+        t.setElevation(dp(8));
+        return t;
+    }
+
+    /** A touch on either button drags both; a tap without moving is a press of that button. */
+    @SuppressLint("ClickableViewAccessibility")
+    private View.OnTouchListener dragOrTap(final int which) {
         final int slop = ViewConfiguration.get(app).getScaledTouchSlop();
-        view.setOnTouchListener(new android.view.View.OnTouchListener() {
+        return new View.OnTouchListener() {
             float downX, downY;
             int startX, startY;
             boolean moved;
 
             @Override
-            public boolean onTouch(android.view.View v, MotionEvent e) {
+            public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
                         downX = e.getRawX();
@@ -121,21 +166,13 @@ final class NextBubble {
                         return true;
                     case MotionEvent.ACTION_UP:
                         if (moved) prefs.edit().putInt("x", lp.x).putInt("y", lp.y).apply();
-                        else backToApp();
+                        else backToApp(which);
                         return true;
                     default:
                         return false;
                 }
             }
-        });
-        try {
-            wm.addView(view, lp);
-        } catch (RuntimeException e) {
-            view = null;
-            return;
-        }
-        main.removeCallbacksAndMessages(null);
-        main.postDelayed(this::hide, MAX_SHOWN_MS);
+        };
     }
 
     void hide() {
@@ -143,14 +180,20 @@ final class NextBubble {
         if (view == null) return;
         try { wm.removeView(view); } catch (RuntimeException ignored) { }
         view = null;
+        next = stop = null;
     }
 
-    private void backToApp() {
-        tapped = true;
+    /**
+     * WhatsApp runs in this app's task, above it. CLEAR_TOP closes WhatsApp's screens there, so a photo
+     * that wasn't sent yet comes back as "canceled" instead of staying open under the next one.
+     * SINGLE_TOP keeps the app's own screen as it is (no reload).
+     */
+    private void backToApp(int which) {
+        tapped = which;
         hide();
         Intent i = new Intent(app, MainActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-        try { app.startActivity(i); } catch (RuntimeException ignored) { tapped = false; }
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        try { app.startActivity(i); } catch (RuntimeException ignored) { tapped = NONE; }
     }
 
     private int dp(float v) {

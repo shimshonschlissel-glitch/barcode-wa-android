@@ -73,7 +73,8 @@ public class MainActivity extends ComponentActivity {
     private PermissionRequest pendingCamera;
     private ValueCallback<Uri[]> fileCallback;
     private boolean waitingWhatsApp = false;
-    private int whatsAppResult = RESULT_OK;
+    /** WhatsApp's answer: -1 sent, 0 not sent, 1 no answer arrived. */
+    private int whatsAppResult = RESULT_FIRST_USER;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -292,11 +293,19 @@ public class MainActivity extends ComponentActivity {
         super.onResume();
         web.onResume();
         bubble.hide();
-        boolean viaBubble = bubble.consumeTapped();
+        int tapped = bubble.consumeTapped();
+        String via = tapped == NextBubble.NEXT ? "next" : tapped == NextBubble.STOP ? "stop" : "";
         if (waitingWhatsApp) {
             waitingWhatsApp = false;
-            js("window.__bcwaNative && window.__bcwaNative.returned(" + whatsAppResult + "," + viaBubble + ")");
+            js("window.__bcwaNative && window.__bcwaNative.returned(" + whatsAppResult + ",'" + via + "')");
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        // The floating buttons bring this screen back (CLEAR_TOP + SINGLE_TOP); nothing to reload.
+        super.onNewIntent(intent);
+        setIntent(intent);
     }
 
     @Override
@@ -393,16 +402,12 @@ public class MainActivity extends ComponentActivity {
             runOnUiThread(() -> {
                 try {
                     waitingWhatsApp = true;
-                    whatsAppResult = RESULT_OK;
-                    if (floating) {
-                        // WhatsApp opens in its own task, so the "next" bubble can bring this app back
-                        // without WhatsApp's screens piling up under it.
-                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        bubble.show();
-                        startActivity(i);
-                    } else {
-                        startActivityForResult(i, REQ_SEND);
-                    }
+                    whatsAppResult = RESULT_FIRST_USER;
+                    // WhatsApp opens in this app's task, for a result: -1 once the photo is sent.
+                    // The floating buttons come back with CLEAR_TOP, which closes WhatsApp's screens,
+                    // so a photo that wasn't sent yet is reported as canceled (0).
+                    if (floating) bubble.show();
+                    startActivityForResult(i, REQ_SEND);
                 } catch (ActivityNotFoundException e) {
                     waitingWhatsApp = false;
                     bubble.hide();
