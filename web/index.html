@@ -281,7 +281,7 @@ html:not(.native) .app-only { display: none !important; }
       <li><span>"משלוח חדש", ומכוונים את המצלמה לברקוד של כל חבילה. כל ברקוד נשמר לבד.</span></li>
       <li><span>בודקים את הרשימה ומתקנים מספר אם צריך.</span></li>
       <li class="web-only"><span>"שלח בוואטסאפ", ובכל תמונה בוחרים את הצ'אט ולוחצים שלח. המספר מגיע ככיתוב.</span></li>
-      <li class="app-only"><span>"שלח בוואטסאפ": כל תמונה נפתחת ישר בצ'אט של הנמען עם המספר ככיתוב. לוחצים "שלח", והאפליקציה חוזרת לבד לתמונה הבאה (אחרי שמפעילים את הכפתור שמעל וואטסאפ).</span></li>
+      <li class="app-only"><span>"שלח בוואטסאפ": כל תמונה נפתחת ישר בצ'אט של הנמען עם המספר ככיתוב. לוחצים "שלח", והאפליקציה חוזרת לבד לתמונה הבאה (אחרי שמפעילים "חזרה אוטומטית").</span></li>
     </ol>
     <p class="lede" style="font-size:.9375rem">הכול נשמר רק בטלפון שלך. אין חשבון ואין שרת.</p>
     <button class="btn btn-ghost btn-small web-only" id="install" type="button" hidden>התקן כאפליקציה</button>
@@ -311,7 +311,7 @@ html:not(.native) .app-only { display: none !important; }
   <footer class="foot">
     <p id="installHint" class="web-only">באנדרואיד עדיף <a href="install.html" style="color:inherit">האפליקציה</a>: היא פותחת ישר את הצ'אט וחוזרת לבד אחרי כל שליחה. אפשר גם להתקין את האתר: בתפריט של כרום, "התקן אפליקציה".</p>
     <details class="diag" id="diagBox">
-      <summary>פרטי אבחון (גרסה 16)</summary>
+      <summary>פרטי אבחון (גרסה 17)</summary>
       <p id="diag" dir="auto"></p>
       <div class="app-only" id="sendLogBox" hidden style="display:grid;gap:6px;margin-top:10px">
         <p style="font-weight:600;color:var(--ink)">רישום שליחה (3 התמונות האחרונות)</p>
@@ -408,8 +408,8 @@ html:not(.native) .app-only { display: none !important; }
     <label class="auto-row app-only" id="autoBackRow" hidden><input type="checkbox" id="autoBack"> חזרה אוטומטית אחרי "שלח"</label>
     <p class="lede app-only" style="font-size:.9375rem" id="appTip">בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.</p>
     <div class="card app-only" id="bubbleInvite" hidden>
-      <p style="font-weight:600">כפתור "הבא" מעל וואטסאפ</p>
-      <p class="lede" style="font-size:.9375rem">אחרי "שלח" לוחצים עליו וחוזרים ישר לתמונה הבאה, בלי "חזור" פעמיים. אנדרואיד לא מאפשר לאפליקציה לבקש את ההרשאה בחלון קופץ, אז מאשרים אותה פעם אחת בהגדרות.</p>
+      <p style="font-weight:600" id="bubbleTitle">חזרה אוטומטית מוואטסאפ</p>
+      <p class="lede" style="font-size:.9375rem" id="bubbleText">אחרי "שלח" בוואטסאפ האפליקציה חוזרת לבד לתמונה הבאה, בלי ללחוץ "חזור". בזמן השליחה מופיע מעל וואטסאפ כפתור קטן "עצור". אנדרואיד לא מאפשר לבקש את ההרשאה בחלון קופץ, אז מאשרים אותה פעם אחת בהגדרות.</p>
       <div class="row" id="bubbleAsk">
         <button class="btn btn-ink btn-small" id="bubbleOn" type="button">הפעל</button>
         <button class="btn btn-ghost btn-small" id="bubbleNo" type="button">לא עכשיו</button>
@@ -642,7 +642,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 16;
+  var VERSION = 17;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -1378,7 +1378,7 @@ html:not(.native) .app-only { display: none !important; }
           via.appendChild(sw);
         }
         if (HAS_BUBBLE && !bubbleOn()) {
-          var on = el('button', 'link-btn', 'הפעלת כפתור "הבא"');
+          var on = el('button', 'link-btn', 'הפעלת חזרה אוטומטית');
           on.type = 'button'; on.style.minHeight = '32px';
           on.addEventListener('click', function () {
             try { localStorage.removeItem('bcwa.bubbleNo'); } catch (e) {}
@@ -1459,12 +1459,20 @@ html:not(.native) .app-only { display: none !important; }
   function bubbleOn() { try { return HAS_BUBBLE && NATIVE.overlayAllowed(); } catch (e) { return false; } }
   function paintBubbleInvite() {
     if (!HAS_BUBBLE) return;
-    var no = false; try { no = localStorage.getItem('bcwa.bubbleNo') === '1'; } catch (e) {}
+    var no = false, had = false;
+    try { no = localStorage.getItem('bcwa.bubbleNo') === '1'; had = localStorage.getItem('bcwa.bubbleHad') === '1'; } catch (e) {}
     var on = bubbleOn();
-    $('bubbleInvite').hidden = (on && !guideOpen) || (no && !guideOpen);
+    if (on) { try { localStorage.setItem('bcwa.bubbleHad', '1'); } catch (e) {} }
+    // It was on and now it's off: usually after an app update, Android takes the permission back (seen 20.11).
+    var lost = !on && had;
+    $('bubbleTitle').textContent = lost ? 'החזרה האוטומטית כבתה' : 'חזרה אוטומטית מוואטסאפ';
+    $('bubbleText').textContent = lost
+      ? 'זה קורה בדרך כלל אחרי עדכון של האפליקציה: אנדרואיד מבטל את האישור "הצגה מעל אפליקציות אחרות". מפעילים שוב, פעם אחת.'
+      : 'אחרי "שלח" בוואטסאפ האפליקציה חוזרת לבד לתמונה הבאה, בלי ללחוץ "חזור". בזמן השליחה מופיע מעל וואטסאפ כפתור קטן "עצור". אנדרואיד לא מאפשר לבקש את ההרשאה בחלון קופץ, אז מאשרים אותה פעם אחת בהגדרות.';
+    $('bubbleInvite').hidden = (on && !guideOpen) || (no && !lost && !guideOpen);
     if (guideOpen) {
       var st = $('bubbleStatus');
-      st.textContent = on ? 'מופעל. מעכשיו יופיע כפתור "הבא" מעל וואטסאפ.' : '';
+      st.textContent = on ? 'מופעל. מעכשיו האפליקציה תחזור לבד אחרי "שלח".' : '';
       if (on) { st.dataset.kind = 'ok'; $('bubbleGuide').hidden = true; } else delete st.dataset.kind;
     }
     var auto = on && autoBackOn();
@@ -1499,7 +1507,7 @@ html:not(.native) .app-only { display: none !important; }
   $('guide3').addEventListener('click', openOverlayList);
   $('guide2').addEventListener('click', function () { try { NATIVE.openAppSettings(); } catch (e) {} });
   $('bubbleNo').addEventListener('click', function () {
-    try { localStorage.setItem('bcwa.bubbleNo', '1'); } catch (e) {}
+    try { localStorage.setItem('bcwa.bubbleNo', '1'); localStorage.removeItem('bcwa.bubbleHad'); } catch (e) {}
     paintBubbleInvite();
   });
   document.addEventListener('visibilitychange', function () {
@@ -1569,7 +1577,7 @@ html:not(.native) .app-only { display: none !important; }
   document.addEventListener('visibilitychange', function () { if (!document.hidden) checkUpdate(); });
 
   // Send log (app 1.6+): WhatsApp's requests for the photo, the "sent" signal and the button taps. In "פרטי אבחון".
-  var LOG_NAMES = { query: 'שאלה על הקובץ', type: 'שאלה על הסוג', open: 'פתיחת הקובץ', close: 'סגירת הקובץ', tap: 'לחיצה', resume: 'חזרה לאפליקציה', sent: '✓ זוהתה שליחה', picker: 'וואטסאפ פתח בחירת נמען', picked: 'נבחר נמען' };
+  var LOG_NAMES = { query: 'שאלה על הקובץ', type: 'שאלה על הסוג', open: 'פתיחת הקובץ', close: 'סגירת הקובץ', tap: 'לחיצה', resume: 'חזרה לאפליקציה', sent: '✓ זוהתה שליחה', nobubble: 'אין הרשאה לכפתור הצף, אין חזרה אוטומטית', picker: 'וואטסאפ פתח בחירת נמען', picked: 'נבחר נמען' };
   var TAP_NAMES = { next: 'הבא', stop: 'עצור', skip: 'דלג', auto: 'חזרה אוטומטית', confirm: 'כבר שלחתי', dismiss: 'אשלח עכשיו' };
   function sendLogLines() {
     var list = [], out = [], n = 0;

@@ -446,6 +446,7 @@ public class MainActivity extends ComponentActivity {
                     // A fresh WhatsApp task for every photo (CLEAR_TASK), so one left unsent doesn't stay open.
                     i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                     SendLog.start(caption, sentName);
+                    if (!floating) SendLog.add("nobubble", "");
                     bubble.setAutoReturn(autoReturn);
                     if (floating) bubble.show();
                     startActivity(i);
