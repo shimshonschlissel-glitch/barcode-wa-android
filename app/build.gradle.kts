@@ -22,8 +22,8 @@ android {
         applicationId = "com.barcodewa.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
 
         // Phones only: keeps the ML Kit native code to the two ARM builds.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }

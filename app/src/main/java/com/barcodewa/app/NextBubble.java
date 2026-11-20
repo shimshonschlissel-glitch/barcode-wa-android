@@ -24,14 +24,14 @@ import android.widget.TextView;
 
 /**
  * Two small buttons that float over WhatsApp while a shipment is being sent: "next" and "stop".
- * Either one brings the app back to the front and closes WhatsApp's screens on the way, so WhatsApp
- * reports whether the photo was really sent. After "next" the page opens the next photo at once
- * (only if it was sent); after "stop" it waits. They can be dragged together; the place is remembered.
+ * Both bring the app back. "Next" before the photo was sent (see SendLog) shows a card over WhatsApp
+ * instead: send now / already sent / skip / stop. With auto-return on, the app comes back by itself
+ * a moment after "send" (autoBack). They can be dragged together; the place is remembered.
  * Needs the "display over other apps" permission, which the person grants once in Settings.
  */
 final class NextBubble {
 
-    static final int NONE = 0, NEXT = 1, STOP = 2, SKIP = 3;
+    static final int NONE = 0, NEXT = 1, STOP = 2, SKIP = 3, AUTO = 4, CONFIRMED = 5;
 
     /** Asked when "next" is tapped: is WhatsApp's send screen still open (the photo not sent yet)? */
     interface StillOpen {
@@ -49,6 +49,8 @@ final class NextBubble {
     private TextView next, stop;
     private WindowManager.LayoutParams lp;
     private String label = "הבא ‹";
+    private boolean sentMark = false;      // the photo went: show ✓ on "next"
+    private boolean autoReturn = true;
     private volatile int tapped = NONE;
 
     NextBubble(Context context) {
@@ -65,12 +67,39 @@ final class NextBubble {
         return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(c);
     }
 
+    /** Called for every photo before WhatsApp opens. */
     void setLabel(String text) {
         if (text != null && !text.trim().isEmpty()) label = text.trim();
+        sentMark = false;
         if (next != null) {
-            next.setText(label);
+            next.setText(nextText());
             stop.setVisibility(isLast() ? View.GONE : View.VISIBLE);
         }
+    }
+
+    void setAutoReturn(boolean on) {
+        autoReturn = on;
+    }
+
+    private String nextText() {
+        return sentMark ? "✓ " + label : label;
+    }
+
+    /** The photo went and the app isn't coming back by itself: mark "next" with ✓ (and close the card if it's up). */
+    void markSent() {
+        sentMark = true;
+        if (prompt != null) { removePrompt(); show(); }
+        else if (next != null) next.setText(nextText());
+    }
+
+    /** The photo went: come back to the app by itself. */
+    void autoBack() {
+        SendLog.add("tap", "auto");
+        backToApp(AUTO);
+    }
+
+    boolean isUp() {
+        return view != null || prompt != null;
     }
 
     /** On the last photo the button reads "סיום ✓" and there is nothing to stop. */
@@ -78,7 +107,7 @@ final class NextBubble {
         return label.startsWith("סיום");
     }
 
-    /** Which button brought the person back, once: NEXT, STOP, or NONE (they used Back). */
+    /** What brought the person back, once: NEXT, STOP, SKIP, CONFIRMED, AUTO, or NONE (they used Back). */
     int consumeTapped() {
         int t = tapped;
         tapped = NONE;
@@ -93,7 +122,7 @@ final class NextBubble {
     void show() {
         if (view != null || !allowed(app)) return;
         DisplayMetrics dm = app.getResources().getDisplayMetrics();
-        next = pill(label, Color.rgb(14, 122, 68), 18, 18);
+        next = pill(nextText(), Color.rgb(14, 122, 68), 18, 18);
         next.setContentDescription("נשלח. חזרה לאפליקציה ופתיחת התמונה הבאה");
         stop = pill("עצור", Color.rgb(48, 48, 48), 15, 14);
         stop.setContentDescription("עצירה: חזרה לאפליקציה בלי לפתוח את התמונה הבאה");
@@ -206,14 +235,13 @@ final class NextBubble {
 
     private void onTap(int which) {
         SendLog.add("tap", which == NEXT ? "next" : which == STOP ? "stop" : "skip");
-        boolean open = stillOpen != null && stillOpen.check();   // also notes the screen for diagnostics
-        if (which == NEXT && open) showPrompt();
+        if (which == NEXT && stillOpen != null && stillOpen.check()) showPrompt();
         else backToApp(which);
     }
 
     /**
-     * "Next" was tapped while WhatsApp's send screen is still open: ask over WhatsApp instead of
-     * going back to the app. Sending in WhatsApp meanwhile closes the card and brings the buttons back.
+     * "Next" was tapped but the photo wasn't sent (no signal yet): ask over WhatsApp instead of going back.
+     * Sending in WhatsApp meanwhile closes the card (markSent / autoBack).
      */
     private void showPrompt() {
         removeButtons();
@@ -230,9 +258,11 @@ final class NextBubble {
         prompt.setElevation(dp(12));
 
         TextView title = text("התמונה עוד לא נשלחה", 19, true, Color.rgb(26, 26, 26));
-        TextView body = text("לוחצים \"שלח\" בוואטסאפ, ואז \"הבא\". או:", 15, false, Color.rgb(80, 80, 80));
+        TextView body = text(autoReturn ? "לוחצים \"שלח\" בוואטסאפ, והאפליקציה תחזור לבד. או:" : "לוחצים \"שלח\" בוואטסאפ, ואז \"הבא\". או:",
+                15, false, Color.rgb(80, 80, 80));
         body.setPadding(0, dp(4), 0, dp(14));
         TextView send = choice("אשלח עכשיו", Color.rgb(14, 122, 68), Color.WHITE);
+        TextView done = choice("כבר שלחתי", Color.rgb(232, 232, 232), Color.rgb(26, 26, 26));
         TextView skip = choice("דלג עליה", Color.rgb(232, 232, 232), Color.rgb(26, 26, 26));
         TextView halt = choice("עצור", Color.rgb(48, 48, 48), Color.WHITE);
         LinearLayout row = new LinearLayout(app);
@@ -241,17 +271,21 @@ final class NextBubble {
         LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         LinearLayout.LayoutParams half2 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         half2.setMarginStart(dp(10));
-        row.addView(skip, half);
-        row.addView(halt, half2);
+        row.addView(done, half);
+        row.addView(skip, half2);
         LinearLayout.LayoutParams full = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         LinearLayout.LayoutParams fullGap = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         fullGap.topMargin = dp(10);
+        LinearLayout.LayoutParams fullGap2 = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        fullGap2.topMargin = dp(10);
         prompt.addView(title);
         prompt.addView(body);
         prompt.addView(send, full);
         prompt.addView(row, fullGap);
+        prompt.addView(halt, fullGap2);
 
-        send.setOnClickListener(v -> { removePrompt(); show(); });
+        send.setOnClickListener(v -> { SendLog.add("tap", "dismiss"); removePrompt(); show(); });
+        done.setOnClickListener(v -> { SendLog.add("tap", "confirm"); backToApp(CONFIRMED); });
         skip.setOnClickListener(v -> { SendLog.add("tap", "skip"); backToApp(SKIP); });
         halt.setOnClickListener(v -> { SendLog.add("tap", "stop"); backToApp(STOP); });
 
@@ -264,21 +298,8 @@ final class NextBubble {
         } catch (RuntimeException e) {
             prompt = null;
             backToApp(NEXT);
-            return;
         }
-        main.postDelayed(watchSent, 700);
     }
-
-    /** While the card is up: once WhatsApp's send screen closes (the photo went), put the buttons back. */
-    private final Runnable watchSent = new Runnable() {
-        @Override
-        public void run() {
-            if (prompt == null) return;
-            if (stillOpen != null && stillOpen.check()) { main.postDelayed(this, 700); return; }
-            removePrompt();
-            show();
-        }
-    };
 
     private TextView text(String s, int sp, boolean bold, int color) {
         TextView t = new TextView(app);
@@ -301,16 +322,16 @@ final class NextBubble {
     }
 
     /**
-     * WhatsApp runs in this app's task, above it. CLEAR_TOP closes WhatsApp's screens there, so a photo
-     * that wasn't sent yet comes back as "canceled" instead of staying open under the next one.
-     * SINGLE_TOP keeps the app's own screen as it is (no reload).
+     * Brings the app's own task to the front; SINGLE_TOP keeps its screen as it is (no reload).
+     * The activity is started while the floating window is still up: since Android 15 an app may open
+     * a screen from the background only while one of its overlay windows is visible.
      */
     private void backToApp(int which) {
         tapped = which;
-        hide();
         Intent i = new Intent(app, MainActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         try { app.startActivity(i); } catch (RuntimeException ignored) { tapped = NONE; }
+        hide();
     }
 
     private int dp(float v) {

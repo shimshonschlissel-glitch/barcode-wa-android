@@ -22,13 +22,13 @@ public class FilesProvider extends ContentProvider {
 
     private final Handler main = new Handler(Looper.getMainLooper());
 
-    /** Test log (1.6): only the photo being sent, not exports. */
+    /** Every request for the photo being sent goes to SendLog, which spots the "send" moment. Not exports. */
     private void log(Uri uri, String event, String detail) {
-        String p = uri.getPath() == null ? "" : uri.getPath();
-        if (!p.toLowerCase(java.util.Locale.ROOT).endsWith(".jpg")) return;
+        String name = uri.getLastPathSegment() == null ? "" : uri.getLastPathSegment();
+        if (!name.toLowerCase(java.util.Locale.ROOT).endsWith(".jpg")) return;
         String who;
         try { who = getCallingPackage(); } catch (RuntimeException e) { who = null; }
-        SendLog.add(event, (who == null ? "" : who.replaceFirst("^com\\.whatsapp", "wa")) + (detail.isEmpty() ? "" : " " + detail));
+        SendLog.access(name, event, (who == null ? "" : who.replaceFirst("^com\\.whatsapp", "wa")) + (detail.isEmpty() ? "" : " " + detail));
     }
 
     @Override

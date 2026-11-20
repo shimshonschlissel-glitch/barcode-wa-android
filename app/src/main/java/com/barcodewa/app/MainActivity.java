@@ -1,19 +1,18 @@
 package com.barcodewa.app;
 
 import android.Manifest;
-import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
-import android.content.ComponentName;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.ContactsContract;
 import android.util.Base64;
 import android.view.View;
@@ -60,7 +59,6 @@ public class MainActivity extends ComponentActivity {
     static final List<String> WHATSAPP = Arrays.asList("com.whatsapp", "com.whatsapp.w4b");
 
     private static final int REQ_CONTACT = 1;
-    private static final int REQ_SEND = 2;
     private static final int REQ_FILE = 3;
     private static final int REQ_CAMERA = 4;
     private static final int REQ_SCAN = 5;
@@ -76,12 +74,10 @@ public class MainActivity extends ComponentActivity {
     private PermissionRequest pendingCamera;
     private ValueCallback<Uri[]> fileCallback;
     private boolean waitingWhatsApp = false;
-    /** WhatsApp's answer: -1 sent, 0 not sent, 1 no answer arrived. */
-    private int whatsAppResult = RESULT_FIRST_USER;
-    /** The WhatsApp screen this app opened (and its real class, if it is an alias). */
-    private String launchedName = "", launchedTarget = "";
-    /** What was on top of this app's task when a floating button was last tapped, for diagnostics. */
-    private String lastTop = "";
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    /** Come back by itself a moment after WhatsApp's "send" (the page's setting). */
+    private boolean autoReturn = true;
+    private static final long AUTO_BACK_MS = 1000;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -93,7 +89,8 @@ public class MainActivity extends ComponentActivity {
         keepClearOfSystemBars(root);
         setContentView(root);
         bubble = new NextBubble(this);
-        bubble.setStillOpen(this::whatsAppStillOpen);
+        bubble.setStillOpen(() -> waitingWhatsApp && !SendLog.sent());
+        SendLog.setOnSent(() -> ui.post(this::onWhatsAppSent));
         scanOverlay = new ScanOverlay(this, root, new ScanOverlay.Listener() {
             @Override
             public void onCode(String code, String format, String fileName) {
@@ -270,9 +267,7 @@ public class MainActivity extends ComponentActivity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
-        if (req == REQ_SEND) {
-            whatsAppResult = res;
-        } else if (req == REQ_CONTACT) {
+        if (req == REQ_CONTACT) {
             if (res != RESULT_OK || data == null || data.getData() == null) return;
             String[] cols = {ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME};
             try (Cursor c = getContentResolver().query(data.getData(), cols, null, null, null)) {
@@ -302,41 +297,25 @@ public class MainActivity extends ComponentActivity {
         web.onResume();
         bubble.hide();
         int tapped = bubble.consumeTapped();
-        if (waitingWhatsApp) SendLog.add("resume", "");
-        String via = tapped == NextBubble.NEXT ? "next" : tapped == NextBubble.STOP ? "stop" : "";
         if (waitingWhatsApp) {
             waitingWhatsApp = false;
-            js("window.__bcwaNative && window.__bcwaNative.returned(" + whatsAppResult + ",'" + via + "'," + JSONObject.quote(lastTop) + ")");
+            SendLog.add("resume", "");
+            // -1 sent (WhatsApp's signal, or the person said so), 0 not sent.
+            boolean sent = SendLog.sent() || tapped == NextBubble.CONFIRMED || tapped == NextBubble.AUTO;
+            String via = tapped == NextBubble.NEXT || tapped == NextBubble.CONFIRMED ? "next"
+                    : tapped == NextBubble.STOP ? "stop" : tapped == NextBubble.SKIP ? "skip" : tapped == NextBubble.AUTO ? "auto" : "";
+            js("window.__bcwaNative && window.__bcwaNative.returned(" + (sent ? -1 : 0) + ",'" + via + "')");
         }
-        lastTop = "";
     }
 
-    /**
-     * WhatsApp runs inside this app's task, so the app may see which of its screens is on top.
-     * Still open = WhatsApp's media composer, or the screen this app opened, is on top: nothing was sent yet.
-     * If the system doesn't say, answer "no" and let WhatsApp's own result decide after coming back.
-     */
-    private boolean whatsAppStillOpen() {
-        ComponentName top = topOfTask();
-        lastTop = top == null ? "?" : top.getClassName().replaceFirst("^com\\.whatsapp\\.", "");
-        if (top == null || !waitingWhatsApp || getPackageName().equals(top.getPackageName())) return false;
-        String cls = top.getClassName();
-        return cls.toLowerCase(Locale.ROOT).contains("composer") || cls.equals(launchedName) || cls.equals(launchedTarget);
-    }
-
-    @SuppressWarnings("deprecation")
-    private ComponentName topOfTask() {
-        try {
-            ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-            int me = getTaskId();
-            for (ActivityManager.AppTask t : am.getAppTasks()) {
-                ActivityManager.RecentTaskInfo ti = t.getTaskInfo();
-                if (ti == null) continue;
-                int id = Build.VERSION.SDK_INT >= 29 ? ti.taskId : ti.persistentId;
-                if (id == me) return ti.topActivity;
-            }
-        } catch (Throwable ignored) { }
-        return null;
+    /** WhatsApp showed the "send" signal (SendLog). Come back by itself, or mark the floating button. */
+    private void onWhatsAppSent() {
+        if (!waitingWhatsApp) return;
+        if (autoReturn && bubble.isUp()) {
+            ui.postDelayed(() -> { if (waitingWhatsApp && bubble.isUp()) bubble.autoBack(); }, AUTO_BACK_MS);
+        } else {
+            bubble.markSent();
+        }
     }
 
     @Override
@@ -419,8 +398,10 @@ public class MainActivity extends ComponentActivity {
             if (!WHATSAPP.contains(pkg)) return "וואטסאפ לא נמצא בטלפון.";
             if (phone == null || !phone.matches("[0-9]{9,15}")) return "מספר הנמען לא תקין.";
             Uri uri;
+            final String sentName;
             try {
                 File f = sharedFile(fileName);
+                sentName = f.getName();
                 byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
                 try (FileOutputStream out = new FileOutputStream(f)) { out.write(bytes); }
                 clearOld(f.getParentFile(), f.getName());
@@ -437,23 +418,15 @@ public class MainActivity extends ComponentActivity {
             i.putExtra("jid", phone + "@s.whatsapp.net");
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             final boolean floating = NextBubble.allowed(MainActivity.this);
-            launchedName = launchedTarget = "";
-            try {
-                ResolveInfo ri = getPackageManager().resolveActivity(i, 0);
-                if (ri != null && ri.activityInfo != null) {
-                    launchedName = ri.activityInfo.name;
-                    launchedTarget = ri.activityInfo.targetActivity != null ? ri.activityInfo.targetActivity : "";
-                }
-            } catch (RuntimeException ignored) { }
             runOnUiThread(() -> {
                 try {
                     waitingWhatsApp = true;
-                    whatsAppResult = RESULT_FIRST_USER;
                     // WhatsApp's entry screen answers "OK" at once and opens the chat in WhatsApp's own task,
-                    // so its result says nothing (found 20.11). Instead: a fresh WhatsApp task for every photo
-                    // (CLEAR_TASK), so a photo left unsent doesn't stay open under the next one.
+                    // so its result says nothing (found 20.11); SendLog tells when the photo is sent.
+                    // A fresh WhatsApp task for every photo (CLEAR_TASK), so one left unsent doesn't stay open.
                     i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    SendLog.start(caption);
+                    SendLog.start(caption, sentName);
+                    bubble.setAutoReturn(autoReturn);
                     if (floating) bubble.show();
                     startActivity(i);
                 } catch (ActivityNotFoundException e) {
@@ -524,7 +497,13 @@ public class MainActivity extends ComponentActivity {
             });
         }
 
-        /** Test log (1.6): WhatsApp's reads of the photo and the button taps, as JSON. */
+        /** Come back by itself a moment after WhatsApp's "send" (needs the floating-button permission). */
+        @JavascriptInterface
+        public void setAutoReturn(boolean on) {
+            runOnUiThread(() -> autoReturn = on);
+        }
+
+        /** WhatsApp's requests for the photo, the "sent" signal and the button taps, as JSON. */
         @JavascriptInterface
         public String sendLog() {
             return SendLog.json();

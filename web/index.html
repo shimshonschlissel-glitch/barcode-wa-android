@@ -235,6 +235,8 @@ html:not(.native) .app-only { display: none !important; }
 .text-input { width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--paper);
   color: var(--ink); font: 500 1rem/1.3 var(--font-body); }
 .auto-next { display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px; background: var(--ok-bg); color: var(--ok-ink); }
+.auto-row { display: flex; align-items: center; gap: 10px; font-size: 0.9375rem; font-weight: 600; min-height: 44px; }
+.auto-row input { width: 22px; height: 22px; accent-color: var(--wa, #0e7a44); }
 .send-log { margin: 8px 0 12px; padding: 0; list-style: none; font: 0.8125rem/1.55 var(--font-mono); direction: rtl; }
 .send-log .log-head { font-weight: 600; margin-top: 8px; }
 .guide { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; counter-reset: g; }
@@ -300,7 +302,7 @@ html:not(.native) .app-only { display: none !important; }
   <footer class="foot">
     <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
     <details class="diag">
-      <summary>פרטי אבחון (גרסה 13)</summary>
+      <summary>פרטי אבחון (גרסה 14)</summary>
       <p id="diag" dir="auto"></p>
     </details>
   </footer>
@@ -388,6 +390,7 @@ html:not(.native) .app-only { display: none !important; }
     </button>
     <button class="link-btn" id="sendSkip" type="button" style="justify-self:center">דלג לפריט הבא</button>
     <p class="lede web-only" style="font-size:.9375rem" id="sendTip">בתמונה הראשונה בוחרים את הצ'אט בוואטסאפ. מהשנייה והלאה הוא מופיע בדרך כלל ראשון במסך השיתוף.</p>
+    <label class="auto-row app-only" id="autoBackRow" hidden><input type="checkbox" id="autoBack"> חזרה אוטומטית אחרי "שלח"</label>
     <p class="lede app-only" style="font-size:.9375rem" id="appTip">בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.</p>
     <div class="card app-only" id="bubbleInvite" hidden>
       <p style="font-weight:600">כפתור "הבא" מעל וואטסאפ</p>
@@ -428,6 +431,7 @@ html:not(.native) .app-only { display: none !important; }
     <button class="btn btn-ink" type="button" data-back="">חזרה למשלוחים</button>
   </div>
   <p class="status" id="sendStatus" role="status" aria-live="polite"></p>
+  <button class="link-btn app-only" id="markSent" type="button" hidden style="justify-self:center">כבר שלחתי אותה, המשך</button>
 </section>
 
 <!-- ============ DIALOGS ============ -->
@@ -629,7 +633,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 13;
+  var VERSION = 14;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -1345,6 +1349,7 @@ html:not(.native) .app-only { display: none !important; }
 
   function startSend(b) {
     showSendStatus('');
+    $('markSent').hidden = true; lastUnsent = null;
     paintSendLog();
     cancelAutoNext();
     paintBubbleInvite();
@@ -1453,9 +1458,22 @@ html:not(.native) .app-only { display: none !important; }
       st.textContent = on ? 'מופעל. מעכשיו יופיע כפתור "הבא" מעל וואטסאפ.' : '';
       if (on) { st.dataset.kind = 'ok'; $('bubbleGuide').hidden = true; } else delete st.dataset.kind;
     }
-    $('appTip').textContent = on ? 'בוואטסאפ לוחצים שלח, ואז על הכפתור הירוק "הבא". "עצור" מחזיר לכאן בלי לפתוח את הבאה.'
-      : 'בוואטסאפ לוחצים שלח, ואז חזור. התמונה הבאה נפתחת לבד.';
+    var auto = on && autoBackOn();
+    $('autoBackRow').hidden = !on;
+    $('autoBack').checked = autoBackOn();
+    $('appTip').textContent = auto ? 'בוואטסאפ לוחצים "שלח", והאפליקציה חוזרת לבד לתמונה הבאה. "עצור" מחזיר לכאן בלי להמשיך.'
+      : on ? 'בוואטסאפ לוחצים "שלח", ואז על הכפתור הירוק "הבא". "עצור" מחזיר לכאן בלי להמשיך.'
+      : 'בוואטסאפ לוחצים "שלח", ואז חזור. האפליקציה יודעת אם התמונה נשלחה.';
   }
+  // Come back from WhatsApp by itself a moment after "send" (app 1.7+, with the floating buttons).
+  function autoBackOn() {
+    if (!NATIVE || typeof NATIVE.setAutoReturn !== 'function') return false;
+    try { return localStorage.getItem('bcwa.autoBack') !== '0'; } catch (e) { return true; }
+  }
+  $('autoBack').addEventListener('change', function () {
+    try { localStorage.setItem('bcwa.autoBack', $('autoBack').checked ? '1' : '0'); } catch (e) {}
+    paintBubbleInvite();
+  });
   // Android 15+ treats "display over other apps" as a restricted setting for apps installed from a file,
   // so the guide adds the "Allow restricted settings" step there.
   var RESTRICTED = (nativeInfo.sdk || 0) >= 35;
@@ -1503,6 +1521,8 @@ html:not(.native) .app-only { display: none !important; }
       var b64 = await blobToB64(rec.full);
       nativePending = { b: b, it: it, at: Date.now() };
       if (HAS_BUBBLE) { try { NATIVE.setBubbleLabel(bubbleLabel(b, it)); } catch (e) {} }
+      if (NATIVE && typeof NATIVE.setAutoReturn === 'function') { try { NATIVE.setAutoReturn(autoBackOn()); } catch (e) {} }
+      $('markSent').hidden = true; lastUnsent = null;
       var err = NATIVE.send(waPkg(), b.phone, it.code, safeName(it.code), b64);
       if (err) { nativePending = null; $('sendNext').disabled = false; showSendStatus(err, 'warn'); }
     } catch (e) {
@@ -1511,8 +1531,8 @@ html:not(.native) .app-only { display: none !important; }
     }
   }
   // Test log (app 1.6): WhatsApp's reads of the photo and the button taps.
-  var LOG_NAMES = { query: 'שאלה על הקובץ', type: 'שאלה על הסוג', open: 'פתיחת הקובץ', close: 'סגירת הקובץ', tap: 'לחיצה', resume: 'חזרה לאפליקציה' };
-  var TAP_NAMES = { next: 'הבא', stop: 'עצור', skip: 'דלג' };
+  var LOG_NAMES = { query: 'שאלה על הקובץ', type: 'שאלה על הסוג', open: 'פתיחת הקובץ', close: 'סגירת הקובץ', tap: 'לחיצה', resume: 'חזרה לאפליקציה', sent: '✓ זוהתה שליחה' };
+  var TAP_NAMES = { next: 'הבא', stop: 'עצור', skip: 'דלג', auto: 'חזרה אוטומטית', confirm: 'כבר שלחתי', dismiss: 'אשלח עכשיו' };
   function sendLogLines() {
     var list = [], out = [], n = 0;
     try { list = JSON.parse(NATIVE.sendLog()); } catch (e) {}
@@ -1555,7 +1575,7 @@ html:not(.native) .app-only { display: none !important; }
     if (via === true) via = 'next';
     via = via || '';
     diag.last = 'חזרה מוואטסאפ: ' + (code === -1 ? 'נשלח' : code === 0 ? 'לא נשלח' : 'בלי תשובה') + ' (קוד ' + code + '), ' +
-      ({ next: 'כפתור הבא', stop: 'כפתור עצור', skip: 'דלג' }[via] || 'חזור') + ', אחרי ' + ((Date.now() - p.at) / 1000).toFixed(1) + ' שניות' +
+      ({ next: 'כפתור הבא', stop: 'כפתור עצור', skip: 'דלג', auto: 'חזרה אוטומטית' }[via] || 'חזור') + ', אחרי ' + ((Date.now() - p.at) / 1000).toFixed(1) + ' שניות' +
       (top ? ', מסך ' + top : '');
     paintDiag();
     paintSendLog();
@@ -1574,6 +1594,9 @@ html:not(.native) .app-only { display: none !important; }
     }
     if (code === 0) {
       $('sendNext').disabled = false;
+      // WhatsApp's signal can be missed: let the person say it went.
+      lastUnsent = { b: b, it: p.it };
+      $('markSent').hidden = false;
       showSendStatus(via === 'next' ? 'התמונה לא נשלחה: נראה שלחצת "הבא" לפני "שלח" בוואטסאפ. לחץ "שלח" כדי לפתוח אותה שוב.'
         : via === 'stop' ? 'נעצר. התמונה הזו לא נשלחה. לחץ "שלח" כדי להמשיך ממנה.'
         : 'נראה שהתמונה לא נשלחה. לחץ "שלח" כדי לנסות שוב.', 'warn');
@@ -1591,8 +1614,21 @@ html:not(.native) .app-only { display: none !important; }
       showSendStatus('נעצר. התמונה הקודמת נשלחה. לחץ "שלח" כדי להמשיך.');
       return;
     }
-    openNextSoon(b, via === 'next' || via === 'skip' ? 300 : 1300);
+    openNextSoon(b, via === 'next' || via === 'skip' || via === 'auto' ? 300 : 1300);
   }
+  var lastUnsent = null;
+  $('markSent').addEventListener('click', async function () {
+    var u = lastUnsent; lastUnsent = null;
+    $('markSent').hidden = true;
+    if (!u || u.it.sentAt) return;
+    u.it.sentAt = Date.now();
+    await save(u.b);
+    showSendStatus('');
+    if (current.view !== 'send' || current.batch !== u.b) return;
+    sendIdx = nextUnsent(u.b.items, u.b.items.indexOf(u.it) + 1);
+    await showSendItem(u.b);
+    if (sendIdx >= 0) openNextSoon(u.b, 1300);
+  });
   // Open the next one by itself, with a moment to stop.
   function openNextSoon(b, ms) {
     $('autoNextText').textContent = 'פריט ' + (sendIdx + 1) + ' נפתח עוד רגע\u2026';
