@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ברקוד לוואטסאפ: התקנה</title>
+<meta name="description" content="אפליקציה לאנדרואיד: סורקים ברקודים של משלוחים ושולחים כל תמונה בוואטסאפ עם המספר שלה ככיתוב. בחינם.">
+<meta name="theme-color" content="#eef1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101613" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&display=swap">
+<style>
+/* Install page for friends: what the app does, the download, and the few steps Android and WhatsApp ask for. */
+:root {
+  --paper: #eef1ec; --surface: #ffffff; --ink: #15211c; --muted: #55635b; --line: #cbd3ca;
+  --send: #0e7a44; --send-ink: #ffffff; --warn-bg: #fff0d2; --warn-ink: #6a4200;
+  --font-body: "IBM Plex Sans Hebrew", "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #101613; --surface: #19221d; --ink: #e8eee8; --muted: #9eaca3; --line: #2e3a33;
+    --send: #2db56c; --send-ink: #04140b; --warn-bg: #3a2c0c; --warn-ink: #ffd68c;
+    color-scheme: dark;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 1rem/1.55 var(--font-body); }
+main { max-width: 34rem; margin: 0 auto; padding: 28px 18px 40px; display: grid; gap: 22px; }
+h1 { font-size: 1.85rem; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; margin: 0; }
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 1.0625rem; }
+.download { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 60px; border-radius: 16px;
+  background: var(--send); color: var(--send-ink); font-weight: 700; font-size: 1.1875rem; text-decoration: none; }
+.meta { color: var(--muted); font-size: 0.875rem; text-align: center; margin-top: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: grid; gap: 12px; }
+ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 14px; }
+ol.steps li { counter-increment: s; position: relative; padding-inline-start: 2.4rem; }
+ol.steps li::before { content: counter(s); position: absolute; inset-inline-start: 0; top: 0; width: 1.8rem; height: 1.8rem; border-radius: 50%;
+  border: 1.5px solid var(--ink); display: grid; place-items: center; font-weight: 600; font-size: 0.9rem; }
+.note { background: var(--warn-bg); color: var(--warn-ink); border-radius: 14px; padding: 14px 16px; }
+ul.plain { margin: 0; padding-inline-start: 1.2rem; display: grid; gap: 6px; }
+.muted { color: var(--muted); font-size: 0.9375rem; }
+a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <header style="display:grid;gap:10px">
+    <h1>ברקוד לוואטסאפ</h1>
+    <p class="lede">סורקים את הברקודים של המשלוח, ושולחים כל תמונה בוואטסאפ עם המספר שלה ככיתוב, לנמען אחד (למשל חברת ההפצה). בשביל התחשבנות מסודרת. בחינם.</p>
+  </header>
+
+  <div>
+    <a class="download" href="barcode-wa.apk" download>⬇ הורדת האפליקציה</a>
+    <p class="meta" id="meta">לאנדרואיד, עם וואטסאפ או וואטסאפ ביזנס</p>
+  </div>
+
+  <section class="card">
+    <h2>התקנה</h2>
+    <ol class="steps">
+      <li>לוחצים <b>הורדת האפליקציה</b>. אם הדפדפן שואל אם להוריד בכל זאת, מאשרים.</li>
+      <li>פותחים את הקובץ שירד (מההתראה או מתיקיית ההורדות). אם הטלפון אומר שאסור להתקין מהמקור הזה: <b>הגדרות</b>, מאשרים לדפדפן להתקין אפליקציות, וחוזרים.</li>
+      <li>אם מופיעה אזהרה של Play Protect על אפליקציה לא מוכרת: <b>פרטים נוספים</b>, ואז <b>התקן בכל זאת</b>. האפליקציה לא בחנות של גוגל, ולכן האזהרה.</li>
+      <li>פותחים את <b>ברקוד לוואטסאפ</b> ומאשרים את המצלמה.</li>
+    </ol>
+  </section>
+
+  <section class="note">
+    <p><b>לפני המשלוח הראשון:</b> שולחים לנמען (חברת ההפצה) הודעה רגילה אחת בוואטסאפ, כדי שיהיה איתו צ'אט. בלי צ'אט קיים וואטסאפ לא פותח אותו ישר, ומבקש לבחור נמען בכל תמונה.</p>
+  </section>
+
+  <section class="card">
+    <h2>איך עובדים</h2>
+    <ol class="steps">
+      <li><b>משלוח חדש</b> ובוחרים נמען מאנשי הקשר.</li>
+      <li><b>סרוק פריטים</b>: מכוונים את המסגרת לברקוד הנכון. כל ברקוד נשמר עם התמונה שלו.</li>
+      <li><b>שלח בוואטסאפ</b>: כל תמונה נפתחת ישר בצ'אט עם המספר ככיתוב. לוחצים "שלח".</li>
+    </ol>
+    <p class="muted">בפעם הראשונה במסך השליחה מופיע "הפעל" לכפתור שמעל וואטסאפ. כדאי להפעיל: אחרי "שלח" האפליקציה חוזרת לבד לתמונה הבאה. יש שם מדריך קצר, כי אנדרואיד מבקש לאשר את זה בהגדרות.</p>
+  </section>
+
+  <section class="card" id="update">
+    <h2>כבר מותקנת?</h2>
+    <p>מורידים שוב מאותו כפתור ומתקינים מעל. המשלוחים וההיסטוריה נשמרים. האפליקציה מודיעה כשיש גרסה חדשה.</p>
+  </section>
+
+  <section style="display:grid;gap:8px">
+    <h2>כדאי לדעת</h2>
+    <ul class="plain muted">
+      <li>הכול נשמר רק בטלפון: אין חשבון ואין שרת. מחיקת האפליקציה מוחקת את ההיסטוריה, ולכן כדאי לייצא לאקסל מדי פעם.</li>
+      <li>אם שולחים הרבה תמונות מהר, וואטסאפ עלול לבקש לבחור נמען. האפליקציה תגיד את מי לבחור.</li>
+      <li>אייפון: האפליקציה לא עובדת. אפשר לבנות קיצור (Shortcuts) שעושה משהו דומה.</li>
+      <li>בלי התקנה: אפשר גם <a href="./">להשתמש באתר</a> מכל דפדפן, אבל שם בוחרים את הצ'אט בכל תמונה.</li>
+    </ul>
+  </section>
+</main>
+<script>
+// Version and size of the current download, from version.json next to this page.
+fetch('version.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (v) {
+  document.getElementById('meta').textContent = 'גרסה ' + v.app + (v.mb ? ' · ' + v.mb + ' מגה' : '') + ' · לאנדרואיד, עם וואטסאפ או וואטסאפ ביזנס';
+}).catch(function () {});
+</script>
+</body>
+</html>

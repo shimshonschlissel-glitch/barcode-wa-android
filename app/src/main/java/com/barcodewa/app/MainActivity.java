@@ -388,7 +388,9 @@ public class MainActivity extends ComponentActivity {
         public String info() {
             try {
                 JSONObject o = new JSONObject();
-                o.put("version", getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
+                android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+                o.put("version", pi.versionName);
+                o.put("code", Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode);
                 JSONArray apps = new JSONArray();
                 for (String p : WHATSAPP) {
                     try { getPackageManager().getPackageInfo(p, 0); apps.put(p); } catch (PackageManager.NameNotFoundException ignored) { }

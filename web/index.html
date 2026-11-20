@@ -264,6 +264,15 @@ html:not(.native) .app-only { display: none !important; }
     <p class="lede">סורקים את הברקודים של המשלוח, ושולחים כל תמונה בוואטסאפ עם המספר שלה ככיתוב.</p>
   </header>
 
+  <div class="card app-only" id="updateCard" hidden>
+    <p style="font-weight:600" id="updateTitle">יש גרסה חדשה של האפליקציה</p>
+    <p class="lede" style="font-size:.9375rem">מורידים ומתקינים מעל הגרסה הקיימת. המשלוחים וההיסטוריה נשמרים.</p>
+    <div class="row">
+      <a class="btn btn-send btn-small" id="updateGo" href="https://shimshonschlissel-glitch.github.io/barcode-wa-android/install.html#update" style="text-decoration:none">להורדה</a>
+      <button class="btn btn-ghost btn-small" id="updateNo" type="button">לא עכשיו</button>
+    </div>
+  </div>
+
   <p class="note" id="noStore" hidden>השמירה בטלפון לא זמינה בדפדפן הזה. הרשימה תימחק כשתסגור את העמוד.</p>
 
   <section class="card" id="onboard" hidden>
@@ -272,7 +281,7 @@ html:not(.native) .app-only { display: none !important; }
       <li><span>"משלוח חדש", ומכוונים את המצלמה לברקוד של כל חבילה. כל ברקוד נשמר לבד.</span></li>
       <li><span>בודקים את הרשימה ומתקנים מספר אם צריך.</span></li>
       <li class="web-only"><span>"שלח בוואטסאפ", ובכל תמונה בוחרים את הצ'אט ולוחצים שלח. המספר מגיע ככיתוב.</span></li>
-      <li class="app-only"><span>"שלח בוואטסאפ": כל תמונה נפתחת ישר בצ'אט של הנמען עם המספר ככיתוב. לוחצים שלח, ואז חזור, והבאה נפתחת לבד.</span></li>
+      <li class="app-only"><span>"שלח בוואטסאפ": כל תמונה נפתחת ישר בצ'אט של הנמען עם המספר ככיתוב. לוחצים "שלח", והאפליקציה חוזרת לבד לתמונה הבאה (אחרי שמפעילים את הכפתור שמעל וואטסאפ).</span></li>
     </ol>
     <p class="lede" style="font-size:.9375rem">הכול נשמר רק בטלפון שלך. אין חשבון ואין שרת.</p>
     <button class="btn btn-ghost btn-small web-only" id="install" type="button" hidden>התקן כאפליקציה</button>
@@ -300,10 +309,16 @@ html:not(.native) .app-only { display: none !important; }
   </section>
 
   <footer class="foot">
-    <p id="installHint" class="web-only">להתקנה: בתפריט של כרום בוחרים "התקן אפליקציה". יש גם <a href="barcode-wa.apk" style="color:inherit">אפליקציית אנדרואיד</a> ששולחת ישר לצ'אט.</p>
-    <details class="diag">
-      <summary>פרטי אבחון (גרסה 15)</summary>
+    <p id="installHint" class="web-only">באנדרואיד עדיף <a href="install.html" style="color:inherit">האפליקציה</a>: היא פותחת ישר את הצ'אט וחוזרת לבד אחרי כל שליחה. אפשר גם להתקין את האתר: בתפריט של כרום, "התקן אפליקציה".</p>
+    <details class="diag" id="diagBox">
+      <summary>פרטי אבחון (גרסה 16)</summary>
       <p id="diag" dir="auto"></p>
+      <div class="app-only" id="sendLogBox" hidden style="display:grid;gap:6px;margin-top:10px">
+        <p style="font-weight:600;color:var(--ink)">רישום שליחה (3 התמונות האחרונות)</p>
+        <p style="font-size:.8125rem">מתי וואטסאפ פנה לתמונה, מתי זוהתה שליחה ומתי לחצת. שניות מרגע שוואטסאפ נפתח.</p>
+        <ol class="send-log" id="sendLogList"></ol>
+        <button class="btn btn-ghost btn-small" id="sendLogCopy" type="button">העתק</button>
+      </div>
     </details>
   </footer>
 </section>
@@ -418,12 +433,6 @@ html:not(.native) .app-only { display: none !important; }
       <p class="status" id="bubbleStatus" role="status" aria-live="polite"></p>
     </div>
     <p class="via app-only" id="via"></p>
-    <details class="card app-only" id="sendLogBox" hidden>
-      <summary style="font-weight:600">בדיקת שליחה (זמני)</summary>
-      <p class="lede" style="font-size:.875rem">מתי וואטסאפ קרא את התמונה מהאפליקציה, ומתי לחצת. שניות מרגע שוואטסאפ נפתח.</p>
-      <ol class="send-log" id="sendLogList"></ol>
-      <button class="btn btn-ghost btn-small" id="sendLogCopy" type="button">העתק</button>
-    </details>
   </div>
   <div id="sendDone" class="card" hidden>
     <h2 style="color:var(--ink)" id="sendDoneTitle">כל הפריטים הועברו</h2>
@@ -633,7 +642,7 @@ html:not(.native) .app-only { display: none !important; }
   }
   /*</pure>*/
 
-  var VERSION = 15;
+  var VERSION = 16;
   var WASM_LOCAL = 'zxing-reader.js';
   var WASM_CDN = 'https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.6/dist/';
   var MAX_SIDE = 1920;
@@ -1531,7 +1540,35 @@ html:not(.native) .app-only { display: none !important; }
       showSendStatus('וואטסאפ לא נפתח. נסה שוב.', 'warn');
     }
   }
-  // Test log (app 1.6): WhatsApp's reads of the photo and the button taps.
+  // App 1.9+: once in a while, ask the site which app version is out, and offer it on the home screen.
+  var SITE = 'https://shimshonschlissel-glitch.github.io/barcode-wa-android/';
+  var UPDATE_EVERY_MS = 6 * 60 * 60 * 1000;
+  function paintUpdate(v) {
+    var no = ''; try { no = localStorage.getItem('bcwa.updNo') || ''; } catch (e) {}
+    var newer = !!(v && nativeInfo.code && v.code > nativeInfo.code && String(v.code) !== no);
+    $('updateCard').hidden = !newer;
+    if (newer) $('updateTitle').textContent = 'יש גרסה חדשה של האפליקציה (' + v.app + ')';
+  }
+  function checkUpdate() {
+    if (!NATIVE || !nativeInfo.code) return;
+    var known = null, at = 0;
+    try { known = JSON.parse(localStorage.getItem('bcwa.updInfo') || 'null'); at = +localStorage.getItem('bcwa.updAt') || 0; } catch (e) {}
+    paintUpdate(known);
+    if (Date.now() - at < UPDATE_EVERY_MS) return;
+    fetch(SITE + 'version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (v) {
+      if (!v || !v.code) return;
+      try { localStorage.setItem('bcwa.updInfo', JSON.stringify(v)); localStorage.setItem('bcwa.updAt', String(Date.now())); } catch (e) {}
+      paintUpdate(v);
+    }).catch(noop);
+  }
+  $('updateNo').addEventListener('click', function () {
+    var v = null; try { v = JSON.parse(localStorage.getItem('bcwa.updInfo') || 'null'); } catch (e) {}
+    try { if (v) localStorage.setItem('bcwa.updNo', String(v.code)); } catch (e) {}
+    $('updateCard').hidden = true;
+  });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkUpdate(); });
+
+  // Send log (app 1.6+): WhatsApp's requests for the photo, the "sent" signal and the button taps. In "פרטי אבחון".
   var LOG_NAMES = { query: 'שאלה על הקובץ', type: 'שאלה על הסוג', open: 'פתיחת הקובץ', close: 'סגירת הקובץ', tap: 'לחיצה', resume: 'חזרה לאפליקציה', sent: '✓ זוהתה שליחה', picker: 'וואטסאפ פתח בחירת נמען', picked: 'נבחר נמען' };
   var TAP_NAMES = { next: 'הבא', stop: 'עצור', skip: 'דלג', auto: 'חזרה אוטומטית', confirm: 'כבר שלחתי', dismiss: 'אשלח עכשיו' };
   function sendLogLines() {
@@ -1553,9 +1590,9 @@ html:not(.native) .app-only { display: none !important; }
     if (!lines.length) ol.appendChild(el('li', '', 'עוד אין רישומים. שלח תמונה וחזור לכאן.'));
     lines.forEach(function (l) { ol.appendChild(el('li', l.charAt(0) === '—' ? 'log-head' : '', l)); });
   }
-  $('sendLogBox').addEventListener('toggle', paintSendLog);
+  $('diagBox').addEventListener('toggle', paintSendLog);
   $('sendLogCopy').addEventListener('click', function () {
-    var text = 'בדיקת שליחה, ' + (nativeInfo.version ? 'אפליקציה ' + nativeInfo.version + ', ' : '') + 'גרסה ' + VERSION + '\n' + sendLogLines().join('\n');
+    var text = 'רישום שליחה, ' + (nativeInfo.version ? 'אפליקציה ' + nativeInfo.version + ', ' : '') + 'גרסה ' + VERSION + '\n' + sendLogLines().join('\n');
     var done = function () { $('sendLogCopy').textContent = 'הועתק ✓'; setTimeout(function () { $('sendLogCopy').textContent = 'העתק'; }, 2000); };
     var fallback = function () {
       var t = el('textarea'); t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
@@ -1760,6 +1797,7 @@ html:not(.native) .app-only { display: none !important; }
     await purgeOld().catch(noop);
     nativeReady.then(function () { if (!nativeDet) loadWasm().then(paintDiag, paintDiag); paintDiag(); });
     route();
+    checkUpdate();
   })();
 })();
 </script>

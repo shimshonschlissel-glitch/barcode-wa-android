@@ -7,7 +7,7 @@ val webAssets = layout.buildDirectory.dir("generated/webassets")
 val syncWeb by tasks.registering(Sync::class) {
     from(rootProject.file("web"))
     into(webAssets.map { it.dir("www") })
-    exclude("sw.js", "*.apk")
+    exclude("sw.js", "*.apk", "install.html", "version.json")
 }
 
 // The release key lives outside the repository. Its location and passwords come from
@@ -22,8 +22,8 @@ android {
         applicationId = "com.barcodewa.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.8"
+        versionCode = 10
+        versionName = "1.9"
 
         // Phones only: keeps the ML Kit native code to the two ARM builds.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }

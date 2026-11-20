@@ -1,5 +1,5 @@
 // Keeps the app working without a connection. Bump VERSION when any file changes.
-const VERSION = 'v15';
+const VERSION = 'v16';
 const SHELL = ['./', 'index.html', 'zxing-reader.js', 'zxing_reader.wasm', 'manifest.webmanifest',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
@@ -18,15 +18,23 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // The page itself: network first so updates arrive, cache when offline.
+  // Pages: network first so updates arrive, cache when offline. Each page under its own name:
+  // before v16 every navigation (also install.html, and tapping the .apk link) was stored as index.html.
   if (req.mode === 'navigate') {
+    const isApp = /\/(index\.html)?$/.test(url.pathname);
+    const isPage = isApp || url.pathname.endsWith('.html');
     e.respondWith(fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(VERSION).then(c => c.put('index.html', copy));
+      if (res.ok && isPage) {
+        const copy = res.clone();
+        caches.open(VERSION).then(c => c.put(isApp ? 'index.html' : url.pathname, copy));
+      }
       return res;
-    }).catch(() => caches.match('index.html')));
+    }).catch(() => caches.match(isApp ? 'index.html' : url.pathname).then(hit => hit || caches.match('index.html'))));
     return;
   }
+
+  // Which app version is out: always ask the network.
+  if (url.pathname.endsWith('version.json')) return;
 
   // Google Fonts: cache on first use.
   if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
